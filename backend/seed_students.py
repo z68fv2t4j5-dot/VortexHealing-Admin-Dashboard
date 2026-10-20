@@ -17,7 +17,9 @@ def seed_students():
     db = SessionLocal()
     try:
         count = 0
-        with open(csv_path, 'r', encoding='utf-8') as csvfile:
+        # utf-8-sig strips the BOM the contacts export starts with; otherwise
+        # the first column is read as '﻿First Name' and every first name is blank
+        with open(csv_path, 'r', encoding='utf-8-sig') as csvfile:
             reader = csv.DictReader(csvfile)
 
             for row in reader:
