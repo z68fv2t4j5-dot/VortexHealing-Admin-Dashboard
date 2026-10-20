@@ -187,7 +187,7 @@ class HandoutsIndexer:
                     "relative_path": doc["relative_path"],
                     "score": best_chunk_score,
                     "word_count": doc["word_count"],
-                    "preview": doc["full_text"][:500]
+                    "preview": best_chunk_text if best_chunk_text else doc["full_text"][:500]
                 })
 
         # Sort by score
