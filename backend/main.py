@@ -5,7 +5,7 @@ import logging
 
 from app.core.config import settings
 from app.core.database import Base, engine
-from app.api import tasks, students, classes, events, emails, ideas, auth, documents, global_students, admin, ai_tasks, handouts
+from app.api import tasks, students, classes, events, emails, ideas, auth, documents, global_students, admin, ai_tasks, handouts, email_campaigns
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -49,6 +49,7 @@ app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(admin.router, prefix="/api", tags=["admin"])
 app.include_router(ai_tasks.router, prefix="/api", tags=["ai_tasks"])
 app.include_router(handouts.router, prefix="/api", tags=["handouts"])
+app.include_router(email_campaigns.router, prefix="/api", tags=["email_campaigns"])
 app.include_router(students.router, prefix="/api/students", tags=["students"])
 app.include_router(global_students.router, prefix="/api", tags=["global_students"])
 app.include_router(classes.router, prefix="/api/classes", tags=["classes"])

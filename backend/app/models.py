@@ -77,14 +77,26 @@ class Task(Base):
 class EmailCampaign(Base):
     __tablename__ = "email_campaigns"
     id = Column(Integer, primary_key=True)
-    name = Column(String, index=True)
+    title = Column(String, index=True)
     subject = Column(String)
     body = Column(Text)
-    recipients = Column(String)
-    scheduled_time = Column(DateTime)
-    sent = Column(Boolean, default=False)
+    recipient_tags = Column(String)  # Comma-separated tags to filter
+    recipient_lists = Column(String) # Comma-separated lists to filter
+    recipient_count = Column(Integer, default=0)
+    status = Column(String, default="draft")  # draft, sent, failed, scheduled
+    scheduled_at = Column(DateTime)
     sent_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class EmailRecipient(Base):
+    __tablename__ = "email_recipients"
+    id = Column(Integer, primary_key=True)
+    campaign_id = Column(Integer, ForeignKey("email_campaigns.id"))
+    student_id = Column(Integer, ForeignKey("students.id"))
+    email_address = Column(String)
+    sent_at = Column(DateTime)
+    status = Column(String, default="pending")  # pending, sent, failed
+    error_message = Column(String)
 
 class GrowthIdea(Base):
     __tablename__ = "growth_ideas"
