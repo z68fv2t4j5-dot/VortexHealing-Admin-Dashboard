@@ -115,6 +115,7 @@ class HandoutsIndexer:
 
         return metadata
 
+    def _chunk_text(self, text, chunk_size=500):
         """Split text into chunks for better search"""
         chunks = []
         sentences = re.split(r'[.!?]+', text)
