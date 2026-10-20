@@ -54,7 +54,8 @@ SKIP = re.compile(  # tunable 1: what is not production code
     r"(^|/)(tests?|__tests__|e2e)/|"
     r"\.(test|spec)\.[jt]sx?$|_test\.py$|(^|/)test_[^/]+\.py$|"
     r"^docs/|^\.claude/|^\.agents/|^\.agent/|^_bmad|^\.harness/|^\.githooks/|^\.github/|^scripts/|"
-    r"\.md$|\.json$|\.toml$|^\.git(ignore|attributes)$|^infra/|(^|/)migrations/"
+    r"\.md$|\.json$|\.toml$|^\.git(ignore|attributes)$|^infra/|(^|/)migrations/|"
+    r"\.(svg|pdf|docx?|xlsx|csv|txt|ini|parked|pyc)$|^\.continue/"
 )
 BASE = os.environ.get("HARNESS_BASE", "origin/main")  # tunable 2: the branch pushes are judged against
 DEFN = re.compile(
