@@ -5,7 +5,7 @@ import logging
 
 from app.core.config import settings
 from app.core.database import Base, engine
-from app.api import tasks, students, classes, events, emails, ideas, auth, documents
+from app.api import tasks, students, classes, events, emails, ideas, auth, documents, global_students, admin, ai_tasks, handouts
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -46,7 +46,11 @@ async def health():
     return {"status": "healthy"}
 
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
+app.include_router(admin.router, prefix="/api", tags=["admin"])
+app.include_router(ai_tasks.router, prefix="/api", tags=["ai_tasks"])
+app.include_router(handouts.router, prefix="/api", tags=["handouts"])
 app.include_router(students.router, prefix="/api/students", tags=["students"])
+app.include_router(global_students.router, prefix="/api", tags=["global_students"])
 app.include_router(classes.router, prefix="/api/classes", tags=["classes"])
 app.include_router(events.router, prefix="/api/events", tags=["events"])
 app.include_router(tasks.router, prefix="/api/tasks", tags=["tasks"])

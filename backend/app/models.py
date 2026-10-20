@@ -31,6 +31,8 @@ class Student(Base):
     last_name = Column(String)
     email = Column(String, unique=True, index=True)
     phone = Column(String)
+    lists = Column(String)  # Comma-separated lists (e.g., "APAC Wizards, Interested in VortexHealing")
+    tags = Column(String)   # Comma-separated tags (e.g., "SRA, Active")
     enrollment_date = Column(DateTime, default=datetime.utcnow)
     status = Column(String, default="active")
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -103,3 +105,21 @@ class Document(Base):
     doc_type = Column(String)
     content = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+class GlobalStudent(Base):
+    __tablename__ = "global_students"
+    id = Column(Integer, primary_key=True)
+    first_name = Column(String)
+    last_name = Column(String)
+    email = Column(String, unique=True, index=True)
+    address_1 = Column(String)
+    address_2 = Column(String)
+    city = Column(String)
+    state = Column(String)
+    zip_code = Column(String)
+    country = Column(String)
+    notes = Column(Text)
+    # All other columns stored as JSON for class enrollments/courses
+    all_data = Column(Text)  # JSON string with all columns
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
