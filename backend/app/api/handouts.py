@@ -41,9 +41,11 @@ async def ask_handouts(query: HandoutsQuery):
     """Ask a question and get answer from Qwen with handout references"""
 
     indexer = get_indexer()
+    all_search_results = []
 
     # First, search for relevant handouts
     search_results = indexer.search(query.question, limit=3)
+    all_search_results.extend(search_results)
 
     # Build context from top results
     context = "Relevant handout excerpts:\n\n"
@@ -53,14 +55,17 @@ async def ask_handouts(query: HandoutsQuery):
     else:
         context += "No handout excerpts found for your question.\n"
 
-    # Send to Qwen with context
+    # First attempt at answer
     prompt = f"""Based on these handout excerpts, answer the user's question:
 
 {context}
 
 User Question: {query.question}
 
-Answer the question clearly, citing which handout each piece of information came from. If no excerpts were provided, say you can't find information on this topic in the handouts."""
+If the provided excerpts don't contain enough information to fully answer the question, respond with:
+[NEEDS_MORE_INFO: suggested search terms]
+
+Otherwise, answer the question clearly, citing which handout each piece of information came from."""
 
     try:
         async with httpx.AsyncClient() as client:
@@ -81,8 +86,60 @@ Answer the question clearly, citing which handout each piece of information came
             result = response.json()
             answer = result['choices'][0]['message']['content']
 
+            # Check if Qwen needs more information
+            if "[NEEDS_MORE_INFO:" in answer:
+                # Extract suggested search terms
+                import re
+                match = re.search(r'\[NEEDS_MORE_INFO:\s*([^\]]+)\]', answer)
+                if match:
+                    follow_up_query = match.group(1).strip()
+                    # Do a follow-up search
+                    follow_up_results = indexer.search(follow_up_query, limit=2)
+                    all_search_results.extend(follow_up_results)
+
+                    # Build expanded context
+                    expanded_context = context + f"Follow-up search for '{follow_up_query}':\n\n"
+                    for result in follow_up_results:
+                        expanded_context += f"From '{result['filename']}':\n{result['preview']}\n\n"
+
+                    # Get final answer with expanded context
+                    final_prompt = f"""Based on these handout excerpts, answer the user's question:
+
+{expanded_context}
+
+User Question: {query.question}
+
+Answer the question clearly, citing which handout each piece of information came from. If still no information is found, explain what couldn't be found."""
+
+                    response = await client.post(
+                        "http://localhost:1234/v1/chat/completions",
+                        json={
+                            "model": "qwen",
+                            "messages": [{"role": "user", "content": final_prompt}],
+                            "temperature": 0.7,
+                            "max_tokens": 1000
+                        },
+                        timeout=60.0
+                    )
+
+                    if response.status_code == 200:
+                        result = response.json()
+                        answer = result['choices'][0]['message']['content']
+                else:
+                    # Remove the [NEEDS_MORE_INFO] marker if present
+                    answer = answer.replace(answer[answer.find("[NEEDS_MORE_INFO:"):answer.find("]")+1], "").strip()
+
     except Exception as e:
         answer = f"Error getting response from Qwen: {str(e)}"
+
+    # Remove duplicates from all_search_results
+    seen = set()
+    unique_results = []
+    for r in all_search_results:
+        key = (r["filename"], r["relative_path"])
+        if key not in seen:
+            seen.add(key)
+            unique_results.append(r)
 
     return {
         "question": query.question,
@@ -92,9 +149,10 @@ Answer the question clearly, citing which handout each piece of information came
                 "filename": r["filename"],
                 "path": r["relative_path"],
                 "relevance": r["score"]
-            } for r in search_results
+            } for r in unique_results
         ]
     }
+
 
 @router.get("/handouts/reload")
 async def reload_handouts():

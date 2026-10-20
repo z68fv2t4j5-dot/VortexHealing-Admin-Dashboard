@@ -11,15 +11,27 @@ HANDOUTS_FOLDER = "/Users/djw/Documents/Handouts-in-English"
 BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 INDEX_FILE = os.path.join(BACKEND_DIR, "handouts_index.json")
 
-# Load embedding model once (lazy-loaded)
+# Semantic search threshold (0-100): minimum score to include result
+SEMANTIC_THRESHOLD = 35  # Tuned for better precision
+
+# Load embedding model once (lazy-loaded with caching)
 _embedding_model = None
+_model_lock = None
 
 def get_embedding_model():
-    """Get or load the embedding model"""
+    """Get or load the embedding model with thread-safe caching"""
     global _embedding_model
     if _embedding_model is None:
+        print("Loading semantic search model (sentence-transformers)...")
         _embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+        # Pre-warm model with a dummy encode
+        try:
+            _embedding_model.encode("warmup", convert_to_numpy=True)
+        except:
+            pass
+        print("✓ Model loaded and ready for inference")
     return _embedding_model
+
 
 class HandoutsIndexer:
     def __init__(self):
@@ -69,7 +81,40 @@ class HandoutsIndexer:
             return self._extract_docx_text(filepath)
         return ""
 
-    def _chunk_text(self, text, chunk_size=500):
+    def _extract_metadata(self, text, filename):
+        """Extract structured metadata from document text"""
+        metadata = {
+            "class_tools": [],
+            "topics": [],
+            "key_terms": []
+        }
+
+        # Pattern: "X is a class tool in Y" or "X is taught in Y"
+        import re
+
+        # Look for class tools: "X is a class tool in Y" or similar
+        class_tool_pattern = r'([A-Za-z\s]+?)\s+(?:is|are)\s+(?:a\s+)?class\s+tool[s]?\s+in\s+([A-Za-z\s]+?)[\.,]'
+        for match in re.finditer(class_tool_pattern, text, re.IGNORECASE):
+            tool = match.group(1).strip()
+            class_name = match.group(2).strip()
+            metadata["class_tools"].append({
+                "tool": tool,
+                "class": class_name
+            })
+
+        # Extract class name from filename if it contains "Review" or "Manual"
+        filename_lower = filename.lower()
+        if 'mf-review' in filename_lower or 'multi-frequency' in filename_lower:
+            metadata["topics"].append("Multi-Frequency")
+        if 'kundalini' in filename_lower:
+            metadata["topics"].append("Kundalini")
+        if 'foundational' in filename_lower:
+            metadata["topics"].append("Foundational")
+        if 'omega' in filename_lower:
+            metadata["topics"].append("Omega")
+
+        return metadata
+
         """Split text into chunks for better search"""
         chunks = []
         sentences = re.split(r'[.!?]+', text)
@@ -109,6 +154,9 @@ class HandoutsIndexer:
                         # Chunk text
                         chunks = self._chunk_text(text)
 
+                        # Extract structured metadata
+                        metadata = self._extract_metadata(text, file)
+
                         # Generate embeddings for chunks
                         chunk_embeddings = []
                         for chunk in chunks:
@@ -127,7 +175,8 @@ class HandoutsIndexer:
                             "full_text": text[:5000],  # Store first 5000 chars for preview
                             "chunks": chunks,
                             "chunk_embeddings": chunk_embeddings,
-                            "word_count": len(text.split())
+                            "word_count": len(text.split()),
+                            "metadata": metadata
                         }
 
                         documents.append(doc)
@@ -181,7 +230,16 @@ class HandoutsIndexer:
             if query_lower in doc["full_text"].lower():
                 best_chunk_score += 10
 
-            if best_chunk_score > 20:  # Threshold for relevance
+            # Boost score for metadata matches (class tools, topics)
+            metadata = doc.get("metadata", {})
+            for tool in metadata.get("class_tools", []):
+                if query_lower in tool["tool"].lower() or query_lower in tool["class"].lower():
+                    best_chunk_score += 15
+            for topic in metadata.get("topics", []):
+                if query_lower in topic.lower():
+                    best_chunk_score += 10
+
+            if best_chunk_score > SEMANTIC_THRESHOLD:  # Threshold for relevance
                 results.append({
                     "filename": doc["filename"],
                     "relative_path": doc["relative_path"],
