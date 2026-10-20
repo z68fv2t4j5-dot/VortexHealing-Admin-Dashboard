@@ -1,98 +1,172 @@
-# AGENTS.md - VortexHealing Admin Dashboard Governance
+# AGENTS.md
 
-## Agent Collaboration Standards
+harness-constitution v1.1.1 (kit: github.com/mattgtwk/MKC_Agentic_dev_harness). Every coding agent and every person working in this repository follows this file. Part A is the constitution and is project-agnostic; Part B is this repository. Part B may add detail and may not contradict Part A. `CLAUDE.md` and `GEMINI.md` only import this file.
 
-This document establishes how Claude Code, Cursor, and other AI agents collaborate on the VortexHealing Admin Dashboard project.
+A rule enters Part A only if it names (a) the value it adds, (b) how it is enforced, and (c) what it displaces. A rule that cannot name an enforcement says "Enforced by: convention" and means it. This file stays under 24 KB (`agents-size`); the always-loaded set (this file, the two adapters, `docs/memory/MEMORY.md`) stays under 32 KB (`context-budget`).
 
-### Core Principles
+## Part A: Constitution
 
-1. **Local-First Development**: No cloud dependencies (Qwen runs locally via LM Studio)
-2. **Data Privacy**: Student data never leaves the local environment
-3. **Incremental Commits**: Each feature gets its own commit with clear messages
-4. **Memory Over Chat**: Decisions are documented in `docs/memory/` for continuity
-5. **Test-Driven**: Changes are verified in the browser before committing
+### 1. Operating model
 
-### Project Rules
+- **One loop, three skills.** Work moves through `harness-open` (orient), `harness-plan` (decide), implement, `harness-close` (prove, record, promote). The skill is the process; nobody remembers a checklist. Enforced by: the skills' completion checklists; the `--prepush` presence checks in section 6.
+- **BMAD above the story.** Anything bigger than a story gets a brief, PRD or architecture through the BMAD skills before stories are cut; story-sized work goes straight to `harness-plan`. The BMAD personas read this file, the architecture map and the memory index at activation; their overrides live in `_bmad/custom/`. Enforced by: `_bmad/custom/*.toml`, checked by `--doctor`.
+- **Three libraries, three jobs.** BMAD decides what the work is. `ponytail` decides what gets built: the laziest solution that works, stdlib and platform before a dependency, one line before fifty. `caveman` decides how it is said and how much is read. None is forked; each is installed by its own installer and pinned in `skills-lock.json`. Enforced by: `skills-lock`; `--doctor`.
+- **One work item per session.** Context bleed between tasks breeds contradictory assumptions. Enforced by: convention.
 
-#### Frontend (React/TypeScript)
-- ✅ Use React Query for data fetching
-- ✅ Use Tailwind-inspired CSS for styling
-- ✅ All pages go in `src/pages/`
-- ✅ All components go in `src/components/`
-- ❌ No external UI libraries (build with raw HTML/CSS)
-- ✅ Responsive design for mobile
+### 2. Adapter rule (vendor neutrality)
 
-#### Backend (FastAPI/Python)
-- ✅ Use SQLAlchemy ORM for database
-- ✅ SQLite for local development
-- ✅ JWT for authentication
-- ✅ Clear API route organization (`app/api/`)
-- ✅ Seed scripts for data import
-- ✅ CORS enabled for frontend communication
+- **This file is canonical.** Codex, Cursor, Copilot, Antigravity and Claude Code read it natively. `CLAUDE.md` and `GEMINI.md` contain one line, `@./AGENTS.md`, and no rules. Enforced by: `adapter-thin`.
+- **Skills live in `.agents/skills/`.** Claude Code reads `.claude/skills/` and the Antigravity IDE reads `.agent/skills/`; both are gitignored junctions to `.agents/skills/`, recreated by `python scripts/harness_lint.py --doctor --relink`. A skill that exists only in a vendor folder is invisible to the other agents. Enforced by: `--doctor`; `.gitignore`.
+- **Enforcement is git and CI, never a vendor hook.** Hooks make the loop fast; the pipeline makes it certain. A behaviour that must be guaranteed is a git hook check or a CI job, because those are the only mechanisms every agent shares. Enforced by: `.githooks/`; `.github/workflows/harness-gates.yml`.
 
-#### Data Management
-- ✅ Weekly updates from `/Users/djw/Documents/VortexHealing Assistant Docs/All Contacts/`
-- ✅ Re-run `seed_students.py` after CSV updates
-- ✅ Class data maintained in `seed_classes.py`
-- ✅ Database schema in `app/models.py`
+### 3. Where things live
 
-#### Git Workflow
-- Feature branches before major changes
-- Meaningful commit messages (what + why)
-- Attribution line: `Co-Authored-By: Claude Haiku 4.5 <noreply@anthropic.com>`
-- One feature per commit (atomic)
+| Kind | Home | Kept honest by |
+|---|---|---|
+| Rule (binds everyone, every time) | this file, Part A | `rule-enforcement`, `agents-size` |
+| Repository fact (build, run, layout, gotchas) | this file, Part B, including the `bmad:context` block | `agents-size`, `claims` |
+| Invariant about the code's structure | `docs/ARCHITECTURE.md` | `architecture-map`, `claims` |
+| Procedure | a skill in `.agents/skills/` | `skills-frontmatter`, `skill-refs` |
+| Decision that constrains future work | `docs/adr/NNNN-*.md` and the register | `adr-register` |
+| Pointer, preference, why-history | `docs/memory/*.md` | `memory-schema`, `memory-authority`, `memory-index` |
+| Session narrative and raw transcript | `docs/sessions/` | `session-log`, `secrets-scan` |
+| Approved plan | `docs/plans/PLAN-<topic>-<YYMMDDhhmm>.md` | `harness-close` step 11 |
+| Machine-specific value or secret | the environment; never a committed file | `secrets-scan`; `.gitignore` |
 
-### Agent Responsibilities
+- **Kind decides home.** A rule goes to Part A; an invariant to the map; a procedure to a skill; a decision to an ADR; a pointer to memory. No fact lives only in memory, and anything that can go out of date has an owner outside memory. Enforced by: `memory-authority` (every memory page points at its owner); the table above.
 
-#### Code Changes
-- **Read First**: Always read relevant files before editing
-- **Plan Mode**: Use EnterPlanMode for non-trivial changes (3+ files or architectural decisions)
-- **Test Immediately**: Restart servers and test in browser before committing
-- **Document Decisions**: Update `docs/memory/` with why, not just what
+### 4. Workflow
 
-#### Data/Database
-- **Backups**: Always back up SQLite before major migrations
-- **Schema Changes**: Update models.py, then re-run seed scripts
-- **Data Validation**: Verify counts after seeding (1771 students, 27 classes)
+- **Investigate first.** Separate what was observed from what is assumed; no product code changes until one mechanism explains the evidence. Enforced by: convention (caveman's investigate-first, adopted as text).
+- **Plan before code, three stances in order.** For anything larger than a one-line fix: the product-manager stance (`bmad-agent-pm`: why before what, acceptance criteria before design); then `ponytail` (the simplest thing that works, every new dependency or abstraction justified in one line); then `grill-me`, mandatory before approving anything irreversible, outward-facing or touching more than about ten files. The plan is `docs/plans/PLAN-<topic>-<YYMMDDhhmm>.md` (read the clock; never type a stamp) and gets a Status and departures header when the work closes. Enforced by: `harness-plan`.
+- **Declare the surface.** The plan names `Surface:` (the file list) and the first commit body carries it. A defect found in any other file is a BACKLOG line, not a fix, whoever caused it. Enforced by: `surface` and `prepush_check.py` at push.
+- **One change, one kind.** Product and tooling (`scripts/`, `.githooks/`, `.github/`) do not ride in the same change without a stated reason. Enforced by: `one-kind` at push; `KIND-OK: <reason>` releases it.
+- **Self-review gate.** Before claiming done: trust boundaries; completeness against ground truth; verification honesty (a suite you did not run is not green; an exit code is not a log; mutate the code and watch the test go red); regression risk; output integrity; failure modes fail loudly. Enforced by: `harness-close` step 1; convention for its honesty.
+- **Verify and stop.** The smallest proof set that shows acceptance; no enhancements, refactors or extra tests after it passes. Enforced by: convention (caveman's verify-and-stop, adopted as text).
+- **Record decisions before proceeding.** The moment a question is answered, write it down: an ADR if durable, the work item if ticket-scoped, memory only as a pointer. Nobody answers the same question twice. Enforced by: `harness-close` step 5; `adr-register`.
+- **Read the consumers and the incumbent before changing either.** `git grep -w` every site that reads a value you change, including files already open; read the incumbent on the base branch and say what behaviour is being replaced. Enforced by: the RULE TWO report of `prepush_check.py` at push; convention for acting on it.
+- **Review before push.** The whole branch diff gets an adversarial review iterated until nothing new is found; the last commit carries `Review: <outcome>`. Enforced by: `trailers` (presence); convention (honesty).
 
-#### Integration Points
-- Frontend talks to Backend API at `http://localhost:8000/api`
-- LM Studio Qwen available at `http://localhost:1234/v1`
-- Chat requires LM Studio running; gracefully handle disconnection
+### 5. Engineering rules
 
-### Decision Log
+- **Configuration and secrets.** No committed file names a host, a drive, an organisation or a person's folder: named environment variables or placeholders instead. Secrets never appear in prompts, logs, commits, transcripts or memory. Enforced by: `secrets-scan`; `.gitignore` (`.env*`).
+- **Native execution, mostly Windows.** Scripts are ASCII; every native call asserts its exit code; paths with spaces are quoted; repositories live under a short root; hooks are LF. Each agent uses its own shell tool and says which. Enforced by: `.gitattributes`; `--doctor` (hook line endings); convention.
+- **Definition of tested.** A behaviour is tested when a test names it, asserts it, and has been seen to fail when the behaviour is broken. Coverage does not define tested; the witnessed red does. Enforced by: convention; `Tests:` trailer presence at push.
+- **Every bugfix ships a regression test written first.** Red captured before the fix, green after, both named in the commit body. Enforced by: `harness-plan` (names the test); convention.
+- **Coverage is a ratchet, never a target.** The line and branch floors in `coverage_baseline.json` only rise, and at least `diff_min_pct` of the executable lines a change adds are covered. Lowering a floor needs `--force` and a stated approval. Enforced by: `ratchet` and `diff-coverage` under `--ratchet` in CI; `harness-close` step 2.
+- **A suite you did not run is not green.** Test output is recorded in the session log and summarised in the `Tests:` trailer. Enforced by: `trailers` (presence); convention.
+- **Token discipline.** This file, the adapters and the memory index stay under 32 KB; a `SKILL.md` stays under 15 KB with detail in `references/`; a memory page under 800 bytes. `caveman` voice is on by default: answer first, one idea per sentence, nothing dropped that changes meaning; full sentences for security warnings, irreversible actions, ambiguous step order and anything persisted (code, commits, docs, tickets). `caveman-compress` may run on prose files such as `NEXT-STEPS.md` and memory pages, never on this file. Enforced by: `context-budget`, `skills-frontmatter`, `memory-schema`; voice by convention.
 
-Decisions made during development are recorded in `docs/memory/` with:
-- **What**: The decision or change
-- **Why**: The reasoning (constraints, user request, technical limitation)
-- **When**: Date made
-- **Impact**: What else it affects
+### 6. Deterministic governance
 
-### Communication
+`python scripts/harness_lint.py` runs at pre-commit and in CI; `--prepush` adds the commit-range checks at push; `--ratchet` runs in CI; `--doctor` checks the machine. A check that could not run reports WARN, never PASS. Exit 1 on any ERROR.
 
-When agents work together:
-1. **Read memory first** to understand prior decisions
-2. **Document new decisions** before implementation
-3. **Test independently** before committing
-4. **Ask before major changes** (via EnterPlanMode for architectural decisions)
+| Check | Duty |
+|---|---|
+| `agents-present`, `agents-size`, `rule-enforcement`, `adr-refs` | this file exists with its version line, under 24 KB; every Part A rule names its enforcement; no ADR numbers in Part A |
+| `adapter-thin`, `context-budget` | adapters import only; always-loaded set under 32 KB |
+| `skill-refs`, `skills-frontmatter`, `skills-lock` | every cited skill exists; valid frontmatter and size; third-party skills pinned |
+| `memory-schema`, `memory-authority`, `memory-index` | Fact/Why/Authority, 800 B, Authority resolves, index matches (`--rebuild-index`) |
+| `adr-register`, `architecture-map`, `claims` | one register row per ADR; one map with `last_reviewed` (warn after 90 days); every `verify:` claim holds |
+| `secrets-scan` | no token-shaped literals in docs or transcripts; no tracked `.env` |
+| `surface`, `one-kind`, `trailers`, `session-log`, `promotions` (`--prepush`) | `Surface:` in the first commit; product and tooling not mixed; `Review:` and `Tests:` present; `docs/sessions/` touched when source changed; every session log lists its promotions and each named owner file is in the change |
+| `ratchet`, `diff-coverage` (`--ratchet`) | line and branch floors never fall; added executable lines meet `diff_min_pct` |
+| `doctor` | junctions, hooks, python, node, uv, BMAD overrides, pinned skills |
 
-### No-Gos
+- **Claims carry their check.** A factual statement about this codebase in this file, the map or a skill carries an HTML comment on the next line beginning `verify:` with one of `exists <path>`, `absent '<regex>' in <dir>`, `present '<regex>' in <dir>` or `count '<regex>' in <dir> between A and B`. Prefer existence and absence to counts; give counts a band. A claim that cannot be checked is rewritten as an observation or deleted. Enforced by: `claims`.
 
-❌ Delete student or class data without backup
-❌ Push to main without testing locally
-❌ Commit without clear message
-❌ Modify database schema without updating models.py
-❌ Ignore CORS or security implications
+### 7. Skills and memory
 
-### Success Criteria
+- **A skill is created only when the procedure was needed twice, took more than thirty minutes to work out, and is not obvious from the docs.** Below that bar it is a note in an existing skill or a memory pointer. Imported skills enter through the same gate and are pinned. Enforced by: convention; `skills-lock`.
+- **Memory is a cache, not an archive.** A page is `**Fact:**`, `**Why:**`, `**Authority:**` under 800 bytes; the Authority is a `path`, a `path#heading` or an `ADR-NNNN` and must resolve. Never restate a rule in memory: memory is read first, so a stale copy beats the truth. Revise in place; a hand-edited page carries `reviewed: true`. Vendor auto-memory is not a store of record: anything durable it holds is promoted into `docs/memory/` at close. Enforced by: `memory-schema`, `memory-authority`, `memory-index`.
+- **Promote every lesson to its owner before the work closes.** Each lesson gets a kind and an owner file, listed in the session log under `## Lessons promoted` as `- <kind> -> <owner path>` (or `- none: <reason>`); the item counts only when that file is in the same change. Naming the owner is not promoting to it. A procedure learned twice becomes a skill here. Enforced by: `promotions` at push; `harness-close` step 6.
+- **Prune on schedule.** At each retrospective a skill unused for a cycle is fixed or deleted and a drifted claim is a defect. Enforced by: convention (the retrospective override is parked in `_bmad/custom/bmad-retrospective.toml.parked` until the upstream skill installs again; see NEXT-STEPS.md).
 
-✅ Dashboard displays students (1771+) searchable by name/email
-✅ Classes display with calendar view (27 classes)
-✅ Chat works when LM Studio is running
-✅ Email campaigns can segment by Tags/Lists
-✅ No error messages in browser console
-✅ All seed operations complete successfully
+### 8. Close routine and the conversation record
 
----
+- **A session ends only when** the self-review gate is written out; tests ran after the last edit, their output is recorded and the coverage ratchet was run over the report; `docs/ARCHITECTURE.md` matches reality; `NEXT-STEPS.md` is rewritten for the next session; decisions are in ADRs; lessons are promoted; memory pages pass and the index is rebuilt; the session log is written; transcripts are copied; the lint is clean; the plan has its Status header; the commit carries `Surface:`, `Tests:` and `Review:`. Enforced by: `harness-close`; `--prepush`.
+- **The conversation record lives in this repository.** Every session leaves `docs/sessions/session_<YYMMDDhhmm>.md` and, where the host exposes it, its raw transcript under `docs/sessions/raw/<host>/` via `python scripts/save_transcript.py`. Nothing of record lives only in a vendor's home folder (Claude, Codex, Gemini, Antigravity). Enforced by: `session-log` at push; `harness-close` step 9.
 
-*This governance structure enables async collaboration where multiple AI agents can work on this project independently while maintaining coherence and avoiding conflicts.*
+### 9. Access boundaries
+
+"Ask first" means state the exact command and target, then wait; silence is no.
+
+- **Ask first (destructive):** deleting more than ten files or anything you did not create this session; `git reset --hard`; force-push; history rewrites; anything against a non-local database. Enforced by: convention; the host's permission prompts.
+- **Ask first (external):** `git push`, pull-request creation, work-item writes, package installs, new network destinations, posting anywhere. Enforced by: convention; the host's permission prompts.
+- **Never:** push to a protected branch; send secrets or personal data anywhere; edit `skills-lock.json` by hand; write into a vendor's skills cache. Enforced by: branch protection (bootstrap step 6); `skills-lock`; convention.
+
+### 10. The working rules, mapped
+
+| Rule | Artefact | Enforced by |
+|---|---|---|
+| Fix the product; tooling is its own change | `one-kind` | `--prepush` |
+| Declare the surface before writing code | `Surface:` in the first commit | `surface`; `prepush_check.py` |
+| A review finding outside the surface is a BACKLOG line | the plan's BACKLOG section | convention |
+| Never push without a clean adversarial review of the whole diff | `Review:` trailer | `trailers` (presence); convention (honesty) |
+| Never self-author a scope override | `SCOPE-OK:` and `KIND-OK:` quote the person who granted it | convention |
+| Read consumers and incumbent before changing either | RULE TWO report | `prepush_check.py` |
+| A claim is a defect if it is not enforced | "Enforced by:" on every rule | `rule-enforcement` |
+| Never type a number a tool generated; point at the artefact | `Tests:` names the command and the output's summary line | convention |
+
+### 11. Changing Part A
+
+- **A change needs** a stated trigger (an incident or an idea), the three questions from the preamble answered (value, enforcement, what it displaces), a version bump of the line at the top, and a review by someone who did not write it; working solo, a `grill-me` pass. Enforced by: `agents-present` (version line); convention.
+
+## Part B: This repository
+
+<!-- Fill from the six bootstrap answers. Keep it short: build, run, test, layout, the handful of repo-specific "never" lines. Path-scoped detail belongs in a skill. Every factual claim about the code carries a verify: line. -->
+
+**Project:** VortexHealing Admin Dashboard. **Tracker:** none. **Sibling repos:** none. Test command and coverage path: see Running and verifying below.
+
+- Pages work on mobile widths as well as desktop.
+- Success criteria: dashboard lists all students, searchable by name or email; Classes shows the schedule; Chat works when LM Studio is running; email campaigns segment by tags and lists; no errors in the browser console; seed scripts complete without errors.
+
+<!-- bmad:context -->
+<!-- Verified 2026-10-20 against 4dbcde8. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
+
+## VortexHealing Admin Dashboard
+
+Local admin tool for one VortexHealing teacher: students, classes and eligibility, email campaigns, tasks, handouts search. React 18 + TypeScript + Vite frontend, FastAPI + SQLAlchemy + SQLite backend, Qwen through LM Studio. Structure in `docs/ARCHITECTURE.md`, decisions in `docs/adr/`, current state in `NEXT-STEPS.md`.
+
+## Policy
+
+- Never commit student or class data (`.db`, `.csv`, `.xlsx`, `.numbers`); the repository is public. Data stays in the `VortexHealing Assistant Docs` folder and `backend/vortexhealing.db`.
+- Never send student data to a cloud service; AI features call local Qwen at `localhost:1234/v1` (ADR-0004).
+- Never delete or rewrite student or class data without first copying `backend/vortexhealing.db` to a dated backup.
+- Never put an email address, name or key in code, logs or docs; use placeholders.
+- Class eligibility and reminder timing come only from `docs/CLASS_RULES.md`; never infer them.
+- No UI component libraries; build with plain HTML elements and inline styles.
+- Commit messages say what changed and why; `Co-Authored-By:` names the model that actually did the work.
+
+## Where things are
+
+- Pages: `frontend/src/pages/`, one per sidebar entry; shared components in `frontend/src/components/`.
+- API: one router per feature in `backend/app/api/`, mounted under `/api` in `backend/main.py`.
+- Models: `backend/app/models.py`. Data imports: `backend/seed_students.py`, `backend/seed_classes.py`.
+- Modal, button and table pattern to copy: `frontend/src/pages/Tasks.tsx`.
+- Small local models in Continue read `.continue/rules/project.md`; update it when this block changes.
+
+## Running and verifying
+
+- Python 3.11+ for the harness scripts and hooks; macOS `/usr/bin/python3` is 3.9 and fails the lint selftest.
+- Tests: `cd backend && python -m pytest --cov=app --cov-branch --cov-report=xml:../coverage.xml`, after `pip install -r backend/requirements-test.txt`. Never install `requirements.txt` just to test; it pulls the ML stack.
+- The frontend has no tests: after changing a page, open it at `localhost:3000` and check the browser console is clean before committing.
+- `./start.sh` opens backend (8000) and frontend (3000) in two Terminal windows; the frontend proxies `/api` to 8000, so use relative `/api` URLs.
+- After the weekly CSV update in `All Contacts/`, re-run `backend/venv/bin/python backend/seed_students.py` and compare the student count with the CSV row count; `seed_classes.py` should leave 27 classes.
+  <!-- verify: exists backend/tests/test_email_campaigns.py -->
+
+## Conventions that differ from defaults
+
+- Inline styles with primary `#667eea`, despite Tailwind being in `package.json` (it is not configured).
+- React Query v3 (`useQuery('key', fn)`, `invalidateQueries('key')`), not TanStack Query v4/v5 syntax.
+- FastAPI scalar parameters on POST routes are query parameters: `/api/email/send?campaign_id=`, not a JSON body.
+- Pages that call Qwen must work, with a clear message, when LM Studio is not running.
+
+## Known pitfalls
+
+- `create_all` never alters an existing table: after changing a model, back up the database and rebuild that table, or every query on it fails.
+- The contacts CSV starts with a UTF-8 BOM; open CSVs with `encoding='utf-8-sig'` or the first column name is wrong.
+- `/api/email/send` only records a send; no mail is delivered yet. Never tell the user an email went out.
+- LM Studio loads models at a small default context; prompts over it are silently truncated. Load Qwen at 16384+.
+
+<!-- /bmad:context -->

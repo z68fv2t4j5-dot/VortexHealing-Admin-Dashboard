@@ -1,0 +1,8 @@
+# What the test suite needs, without the ML stack in requirements.txt (keeps CI fast)
+fastapi==0.104.1
+sqlalchemy==2.0.23
+pydantic==2.5.0
+pydantic-settings==2.1.0
+httpx==0.25.2
+pytest==8.3.3
+pytest-cov==5.0.0

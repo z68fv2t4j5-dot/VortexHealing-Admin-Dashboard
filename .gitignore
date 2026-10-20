@@ -1,12 +1,36 @@
+# secrets and machine-specific values never enter the repository
+.env
+.env.*
+!.env.example
+# vendor skill folders are junctions to .agents/skills; recreate with: python scripts/harness_lint.py --doctor --relink
+# (no trailing slash: on macOS they are symlinks, which a "dir/" pattern does not match)
+.claude/skills
+.agent/skills
+# BMAD personal layers (team files are committed)
+_bmad/config.user.toml
+_bmad/custom/*.user.toml
+# harness session state (transcript sync marker)
+.harness/
+# build, test and coverage output
+coverage.xml
+htmlcov/
+.coverage
+.pytest_cache/
+
+# Student and class data stays local (AGENTS.md Part B)
+*.db
+*.csv
+*.xlsx
+*.numbers
+
+# Python
+__pycache__/
+*.pyc
+
 # Backend
-backend/__pycache__/
-backend/*.pyc
-backend/.env
 backend/.venv
 backend/venv/
-backend/*.db
 backend/uploads/
-backend/.pytest_cache/
 backend/build/
 backend/dist/
 backend/*.egg-info/
@@ -16,8 +40,6 @@ backend/handouts_index.json
 frontend/node_modules/
 frontend/dist/
 frontend/build/
-frontend/.env.local
-frontend/.env
 
 # IDEs
 .vscode/
@@ -30,7 +52,6 @@ frontend/.env
 
 # OS
 Thumbs.db
-.DS_Store
 
 # Docker
 .dockerignore
@@ -40,7 +61,3 @@ Thumbs.db
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Testing
-.coverage
-htmlcov/
