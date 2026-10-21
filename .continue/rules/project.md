@@ -13,7 +13,8 @@ Rules:
 - Only use endpoints, fields and files that exist. If unsure, say so and ask.
   Never invent an API route or a response shape.
 - Copy patterns from the file named in the request (e.g. Tasks.tsx for modals).
-- Class eligibility and reminder timing come only from docs/CLASS_RULES.md.
+- Class eligibility comes only from backend/app/class_rules.py; reminder timing from docs/CLASS_RULES.md.
+- Email goes to the APAC Wizards list only; filter by full-word class tags only.
 - One change per answer. Output the complete changed file, no tutorial.
 - Student data stays local. Never put emails, names or keys in code or logs.
 - Don't suggest creating new projects or servers; extend backend/app/api/.

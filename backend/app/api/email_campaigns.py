@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models import EmailCampaign, EmailRecipient, Student
+from app.class_rules import class_for
 from pydantic import BaseModel
 from datetime import datetime
 import httpx
@@ -53,6 +54,16 @@ def filter_students_by_tags_and_lists(db: Session, tags: str, lists: str):
         filtered.append(student)
 
     return filtered
+
+# Campaigns go to this list only for now (Daniel, 2026-10-21)
+EMAIL_LIST = "APAC Wizards"
+
+@router.get("/email/options")
+async def email_options(db: Session = Depends(get_db)):
+    """Lists and tags the composer may offer: the APAC list, and the full-word class tags its students carry"""
+    students = filter_students_by_tags_and_lists(db, "", EMAIL_LIST)
+    tags = sorted({t.strip() for s in students for t in (s.tags or "").split(",") if class_for(t)})
+    return {"lists": [EMAIL_LIST], "tags": tags}
 
 @router.post("/email/campaigns", response_model=EmailCampaignResponse)
 async def create_campaign(campaign: EmailCampaignCreate, db: Session = Depends(get_db)):

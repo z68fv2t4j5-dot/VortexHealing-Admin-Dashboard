@@ -1,6 +1,6 @@
 # Architecture map
 
-last_reviewed: 2026-10-20
+last_reviewed: 2026-10-21
 
 The one living map of this repository: components, flows, boundaries and invariants. Read it before touching unfamiliar code; update it in the same change that moves structure (`harness-close` step 3). It describes this repository only. Each invariant cites the defect or decision that bought it. Factual claims carry a `verify:` line so the lint fails on the commit that makes them false.
 
@@ -20,19 +20,22 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
 | `backend/handouts_service.py` | Handouts text extraction, chunking, embeddings and search | this map, Handouts flow |
 | `backend/seed_*.py` | Imports students and classes from files outside the repository | AGENTS.md Part B (data) |
 | `backend/tests/` | pytest suite; email campaign API so far | AGENTS.md Part B (test) |
-| `docs/CLASS_RULES.md` | Class prerequisites and reminder timing (draft) | itself |
+| `backend/app/class_rules.py` | Flowchart prerequisites as data; completed classes from tags; eligibility; next class | `docs/CLASS_RULES.md`, ADR-0006 |
+| `docs/CLASS_RULES.md` | How to read the flowchart, decisions on unusual boxes, reminder timing | itself |
 
 <!-- verify: exists backend/app/api/email_campaigns.py -->
 <!-- verify: exists backend/handouts_service.py -->
 <!-- verify: exists frontend/src/pages/Email.tsx -->
 <!-- verify: exists docs/CLASS_RULES.md -->
+<!-- verify: exists backend/app/class_rules.py -->
 
 ## Flows
 
 1. Student import: `All Contacts/*.csv` (outside repo) -> `backend/seed_students.py` -> `students` table -> `/api/students` -> Students page. Files: `backend/seed_students.py`, `backend/app/api/students.py`.
-2. Email campaign: Email page composer -> `POST /api/email/preview` (live recipient count from tags/lists) -> `POST /api/email/campaigns` (draft) -> `POST /api/email/send?campaign_id=` -> status `sent` and one `email_recipients` row per student. Files: `frontend/src/pages/Email.tsx`, `backend/app/api/email_campaigns.py`.
+2. Email campaign: Email page loads `GET /api/email/options` (APAC Wizards list, full-word class tags) -> composer -> `POST /api/email/preview` (live recipient count from tags/lists) -> `POST /api/email/campaigns` (draft) -> `POST /api/email/send?campaign_id=` -> status `sent` and one `email_recipients` row per student. Files: `frontend/src/pages/Email.tsx`, `backend/app/api/email_campaigns.py`.
 3. Handouts: 100 PDF/DOC handouts -> text -> ~500-char chunks -> `all-MiniLM-L6-v2` embeddings -> `backend/handouts_index.json` (154 MB, gitignored) -> `GET /api/handouts/search` (cosine score 0-100, +20 filename match, +10 text match) and `POST /api/handouts/ask` (top chunks to Qwen). The index loads at startup; `/api/handouts/reload` rebuilds it.
-4. AI features: Chat, Tasks and Handouts call LM Studio at `localhost:1234/v1`; pages must handle it being down.
+4. Eligibility: student tags -> `class_for` (full-word class tags only) -> `completed_from_tags` (adds the classes each one hangs off) -> `is_eligible` / `next_class` against the `classes` schedule. Files: `backend/app/class_rules.py`. Nothing calls it from the UI yet.
+5. AI features: Chat, Tasks and Handouts call LM Studio at `localhost:1234/v1`; pages must handle it being down.
 
 ## Boundaries and invariants
 
@@ -55,5 +58,5 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
 ## Deliberately not built yet
 
 - Real email delivery: add when campaigns are ready to go to students (needs a mail account and an approval step).
-- Reminder scheduler and "reminders due" panel: add when `docs/CLASS_RULES.md` is verified and a class-completion source is chosen.
+- Reminder scheduler and "reminders due" panel: next; builds on `class_rules.next_class` and the timing in `docs/CLASS_RULES.md`.
 - Frontend tests: add when a page grows logic beyond calling the API.
