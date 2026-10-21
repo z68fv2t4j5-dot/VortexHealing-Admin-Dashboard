@@ -5,7 +5,7 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 ## What is true now (measured 2026-10-21)
 
 - Backend suite: 24 tests (email campaign API and class rules), run by `cd backend && python -m pytest`.
-- Class prerequisites are transcribed from the flowchart into `backend/app/class_rules.py`; completed classes come from full-word class tags (ADR-0006). Against the "Next Eligible Class" spreadsheet: 120 of 128 APAC Wizards students match (`docs/CLASS_RULES.md` section 2 explains the 8).
+- Class prerequisites are transcribed from the flowchart into `backend/app/class_rules.py`; completed classes come from full-word class tags (ADR-0006). APAC Wizards count as having done Foundational. Against the "Next Eligible Class" spreadsheet: 116 of 128 match, and `docs/CLASS_RULES.md` section 2 explains all 12 differences as spreadsheet gaps.
 - Email page offers the APAC Wizards list only and full-word class tags only (`GET /api/email/options`). `/api/email/send` records a send; it does not deliver mail.
 - Raw agent transcripts stay on this machine (ADR-0005); session logs carry no student names or emails.
 
@@ -19,8 +19,7 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 ## Open threads
 
 - Reminder scheduler and "reminders due" panel: the next feature. For each scheduled class, at 2 months, 1 month and 2 weeks before, list APAC Wizards students for whom `is_eligible` holds and who have not completed it; a person approves before anything is sent.
-- Abbreviated tags: Daniel to confirm meanings (e.g. CKC = Clearing the Kundalini Channel, CV+ = Core Veil, LF, KI, MS, MF, SI, CQ, BT, DM, OG, IP, SOH). Mapping confirmed ones in `ALIASES` would close most of the spreadsheet gap.
-- APAC Wizards membership and Foundational: 4 APAC Wizards students have no class tags, and the spreadsheet treats them as having done Foundational. Ask Daniel whether being an APAC Wizard implies Foundational.
+- Abbreviated tags are deliberately ignored (Daniel, 2026-10-21); revisit only if Daniel decides to define them.
 - Classes page shows wrong prerequisites: `backend/seed_classes.py` predates the flowchart; regenerate its `prerequisites` from `class_rules.py` (back up the database before reseeding).
 - Email delivery: no mail transport; decide the sending account and keep a human approval step before any real send.
 - Parked retrospective: BMAD's `bmad-retrospective` skill fails to install (YAML error, reported upstream as bmad-code-org/BMAD-METHOD#3130). When it is fixed: `npx skills add bmad-code-org/BMAD-METHOD -a codex -s bmad-retrospective -y`, rename `_bmad/custom/bmad-retrospective.toml.parked` back to `.toml`, and restore the original enforcement on "Prune on schedule" in AGENTS.md Part A (bump the constitution version).
