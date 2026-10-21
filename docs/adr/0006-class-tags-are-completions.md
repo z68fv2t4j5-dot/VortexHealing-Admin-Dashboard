@@ -14,7 +14,7 @@ Treat a student's full-word class tags, mapped through `backend/app/class_rules.
 
 - No new table or import; completions update whenever the contacts CSV is re-seeded.
 - Completions recorded only in abbreviated tags are missed (3 of 128 in the check), so a few students will be offered a class they have already done until their tags are fixed or the abbreviations are mapped.
-- Students with no class tags are treated as new and offered Foundational Training only.
+- Students with no class tags are treated as new and offered Foundational Training, except that everyone on the APAC Wizards list counts as having completed it.
 
 ## Alternatives rejected
 

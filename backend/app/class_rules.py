@@ -142,9 +142,15 @@ def class_for(name: str) -> Optional[str]:
     return _LOOKUP.get(key)
 
 
-def completed_from_tags(tags: str) -> set:
-    """Classes a student has completed, from their comma-separated tags."""
+# Being on one of these lists means the student has completed Foundational Training (Daniel, 2026-10-21)
+FOUNDATIONAL_LISTS = {"apac wizards"}
+
+
+def completed_from_tags(tags: str, lists: str = "") -> set:
+    """Classes a student has completed, from their comma-separated tags and lists."""
     done = {c for c in (class_for(t) for t in (tags or "").split(",")) if c}
+    if any(l.strip().lower() in FOUNDATIONAL_LISTS for l in (lists or "").split(",")):
+        done.add(FOUNDATIONAL)
     stack = list(done)
     while stack:
         rule = CLASSES[stack.pop()]

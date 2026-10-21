@@ -30,11 +30,11 @@ Decisions on boxes that are not plain prerequisites (approved 2026-10-21):
 - Transformation Days: eligible after Awakening to Divinity.
 - Divine Magic II: never offered automatically; the repeat rule needs a person.
 - TimeStreams, TimeStreams Lite, Divine Magic I: given inside other classes, never scheduled.
-- A student with no class tags is eligible for Foundational Training only.
+- Every student on the APAC Wizards list has completed Foundational Training (Daniel, 2026-10-21), whatever their tags say.
 
 ## 2. What a student has completed
 
-Read from their **full-word class tags** (ADR-0006): Foundational, Magical
+Read from their **full-word class tags** (ADR-0006), plus Foundational Training for everyone on the APAC Wizards list: Foundational, Magical
 Structures, Sensing I, Omega, MultiFrequency, Jewel and so on. Abbreviated or
 dated tags (`SRA`, `CV+`, `MS-Cert`, `26-01-DM`) are ignored for now.
 
@@ -43,11 +43,12 @@ tagged LifeForm has done Multi-Frequency, Karmic Intensive, Magical Structures
 and Foundational; a student tagged Sensing I has done Magical Structures.
 "Also requires" boxes are not implied.
 
-Checked 2026-10-21 against `APAC Wizards - Next Eligible Class.xlsx`: 120 of
-128 students get the same next class. The 8 differences are 4 students with no
-class tags, 3 whose completions are only in abbreviated tags (e.g. a `CKC` tag
-for Clearing the Kundalini Channel), and 1 where the spreadsheet followed the
-old, wrong prerequisites.
+Checked 2026-10-21 against `APAC Wizards - Next Eligible Class.xlsx`: 116 of
+128 students get the same next class. The 12 differences are all spreadsheet
+gaps: 8 untagged APAC Wizards the spreadsheet sent back to Foundational, 3 whose
+completions appear only in abbreviated tags (e.g. a `CKC` tag for Clearing the
+Kundalini Channel; abbreviations are deliberately ignored), and 1 where it
+followed the old, wrong prerequisites.
 
 ## 3. Reminder timing
 

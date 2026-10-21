@@ -92,3 +92,13 @@ def test_next_class_is_the_earliest_eligible_untaken_class_from_today():
 
 def test_next_class_is_none_when_nothing_fits():
     assert next_class(completed_from_tags("Magical Structures, Clearing Kundalini"), SCHEDULE, datetime(2026, 10, 6)) is None
+
+
+def test_apac_wizards_have_completed_foundational():
+    done = completed_from_tags("", "Free Events, APAC Wizards")
+    assert done == {"Foundational Training"}
+    assert is_eligible("Clearing the Kundalini Channel", done)
+
+
+def test_other_lists_imply_nothing():
+    assert completed_from_tags("", "Global Wizards, Free Events") == set()
