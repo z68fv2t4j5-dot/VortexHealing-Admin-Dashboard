@@ -63,8 +63,9 @@ Taken from `APAC Class Email Reminder Alerts.ics`:
 Rules:
 - Send each reminder only to students who are **eligible** for that class (sections 1 and 2).
 - Don't email a student who has already completed or is enrolled in that class.
-- If a reminder date has already passed when a class is added, skip that reminder. Don't send it late.
-- Every send is reviewed and approved by a person before it goes out. Nothing sends automatically.
+- A reminder stays on the Email page's "Reminders due" list from its date for 7 days, then drops off. It is never sent late (ADR-0007).
+- Every reminder is reviewed and approved by a person before it goes out. Nothing sends automatically. Each class and stage can be approved once.
+- Dates are Sydney dates. Months are calendar months; a 31st falls back to the month's last day.
 - For now, reminders and campaigns go to the APAC Wizards list only.
 
 ## 4. Student status labels
