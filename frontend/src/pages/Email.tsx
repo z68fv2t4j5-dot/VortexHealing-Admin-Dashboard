@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useQueryClient } from 'react-query';
 import axios from 'axios';
 import { Mail, Send, Filter, Tag, X } from 'lucide-react';
@@ -33,8 +33,10 @@ interface PendingSend {
   recipient_lists: string;
 }
 
-const splitCsv = (value: string | null | undefined) =>
-  (value || '').split(',').map(v => v.trim()).filter(Boolean);
+interface EmailOptions {
+  lists: string[];
+  tags: string[];
+}
 
 const overlayStyle: React.CSSProperties = {
   position: 'fixed',
@@ -143,7 +145,6 @@ export default function Email() {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [selectedLists, setSelectedLists] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
 
   const [pendingSend, setPendingSend] = useState<PendingSend | null>(null);
@@ -157,26 +158,15 @@ export default function Email() {
     axios.get('/api/email/campaigns').then(r => r.data).catch(() => [])
   );
 
-  // All students, used only to build the tag/list dropdown options
-  const { data: allStudents } = useQuery('studentFilterOptions', () =>
-    axios.get('/api/students/filter').then(r => r.data.students).catch(() => [])
+  // The backend decides the scope: the APAC Wizards list and full-word class tags
+  const { data: options } = useQuery<EmailOptions>('emailOptions', () =>
+    axios.get('/api/email/options').then(r => r.data)
   );
-
-  const { tagOptions, listOptions } = useMemo(() => {
-    const tags = new Set<string>();
-    const lists = new Set<string>();
-    (allStudents || []).forEach((s: any) => {
-      splitCsv(s.tags).forEach(t => tags.add(t));
-      splitCsv(s.lists).forEach(l => lists.add(l));
-    });
-    return {
-      tagOptions: Array.from(tags).sort(),
-      listOptions: Array.from(lists).sort()
-    };
-  }, [allStudents]);
+  const tagOptions = options?.tags ?? [];
 
   const recipientTags = selectedTags.join(',');
-  const recipientLists = selectedLists.join(',');
+  // Empty would mean every student, so nothing can be previewed or sent until the list has loaded
+  const recipientLists = (options?.lists ?? []).join(',');
 
   // Live recipient count while composing
   const { data: composerPreview, isFetching: previewLoading } = useQuery<PreviewResult>(
@@ -187,7 +177,7 @@ export default function Email() {
         recipient_tags: recipientTags,
         recipient_lists: recipientLists
       }).then(r => r.data),
-    { enabled: showComposer, keepPreviousData: true }
+    { enabled: showComposer && !!recipientLists, keepPreviousData: true }
   );
 
   const resetComposer = () => {
@@ -195,11 +185,10 @@ export default function Email() {
     setSubject('');
     setBody('');
     setSelectedTags([]);
-    setSelectedLists([]);
     setShowComposer(false);
   };
 
-  const composerIncomplete = !title.trim() || !subject.trim() || !body.trim();
+  const composerIncomplete = !title.trim() || !subject.trim() || !body.trim() || !recipientLists;
 
   const handleSaveDraft = async () => {
     if (composerIncomplete) return;
@@ -368,39 +357,24 @@ export default function Email() {
                 <label style={{ ...labelStyle, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <Filter size={16} style={{ color: '#667eea' }} /> Recipients
                 </label>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.5rem' }}>
-                  <select
-                    value=""
-                    onChange={(e) => addOption(e.target.value, selectedTags, setSelectedTags)}
-                    style={inputStyle}
-                  >
-                    <option value="">Add tag…</option>
-                    {tagOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                  </select>
-                  <select
-                    value=""
-                    onChange={(e) => addOption(e.target.value, selectedLists, setSelectedLists)}
-                    style={inputStyle}
-                  >
-                    <option value="">Add list…</option>
-                    {listOptions.map(l => <option key={l} value={l}>{l}</option>)}
-                  </select>
-                </div>
+                <p style={{ margin: '0 0 0.5rem', color: '#666', fontSize: '0.9rem' }}>
+                  List: <strong>{recipientLists || 'loading…'}</strong>
+                </p>
+                <select
+                  value=""
+                  onChange={(e) => addOption(e.target.value, selectedTags, setSelectedTags)}
+                  style={inputStyle}
+                >
+                  <option value="">Add class tag…</option>
+                  {tagOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
 
-                {(selectedTags.length > 0 || selectedLists.length > 0) && (
+                {selectedTags.length > 0 && (
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.75rem' }}>
                     {selectedTags.map(t => (
                       <span key={`tag-${t}`} style={chipStyle}>
                         <Tag size={12} /> {t}
                         <button onClick={() => removeOption(t, selectedTags, setSelectedTags)} style={{ ...closeButtonStyle, padding: 0, display: 'flex' }}>
-                          <X size={12} />
-                        </button>
-                      </span>
-                    ))}
-                    {selectedLists.map(l => (
-                      <span key={`list-${l}`} style={chipStyle}>
-                        <Filter size={12} /> {l}
-                        <button onClick={() => removeOption(l, selectedLists, setSelectedLists)} style={{ ...closeButtonStyle, padding: 0, display: 'flex' }}>
                           <X size={12} />
                         </button>
                       </span>
@@ -414,9 +388,9 @@ export default function Email() {
                       <strong style={{ color: '#333', opacity: previewLoading ? 0.6 : 1 }}>
                         {composerPreview.total_recipients} students match your filters
                       </strong>
-                      {selectedTags.length === 0 && selectedLists.length === 0 && (
+                      {selectedTags.length === 0 && (
                         <div style={{ color: '#856404', fontSize: '0.85rem', marginTop: '0.25rem' }}>
-                          No filters selected: this will go to every student with an email address.
+                          No class tag selected: this will go to every student on {recipientLists}.
                         </div>
                       )}
                       <RecipientSample preview={composerPreview} />

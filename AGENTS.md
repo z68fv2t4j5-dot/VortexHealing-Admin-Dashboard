@@ -135,7 +135,8 @@ Local admin tool for one VortexHealing teacher: students, classes and eligibilit
 - Never send student data to a cloud service; AI features call local Qwen at `localhost:1234/v1` (ADR-0004).
 - Never delete or rewrite student or class data without first copying `backend/vortexhealing.db` to a dated backup.
 - Never put an email address, name or key in code, logs or docs; use placeholders.
-- Class eligibility and reminder timing come only from `docs/CLASS_RULES.md`; never infer them.
+- Class eligibility comes only from `backend/app/class_rules.py` (transcribed from the flowchart) and reminder timing only from `docs/CLASS_RULES.md`; never infer them. Change the code when the chart changes, then the doc.
+- Email campaigns go to the APAC Wizards list only for now (`EMAIL_LIST` in `backend/app/api/email_campaigns.py`); tag filters offer full-word class tags only.
 - No UI component libraries; build with plain HTML elements and inline styles.
 - Commit messages say what changed and why; `Co-Authored-By:` names the model that actually did the work.
 

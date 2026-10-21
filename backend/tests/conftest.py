@@ -23,11 +23,11 @@ def db():
     session = sessionmaker(bind=engine)()
     session.add_all([
         Student(first_name="Ana", last_name="One", email="ana@example.com",
-                tags="SRA, Active", lists="APAC Wizards, Free Events"),
+                tags="SRA, Active, Sensing I, 26-01-S1, MS-Cert", lists="APAC Wizards, Free Events"),
         Student(first_name="Ben", last_name="Two", email="ben@example.com",
-                tags="Active", lists="Global Wizards"),
+                tags="Active, Omega", lists="Global Wizards"),
         Student(first_name="Cal", last_name="Three", email="cal@example.com",
-                tags="", lists="APAC Wizards"),
+                tags="Foundational", lists="APAC Wizards"),
         Student(first_name="Dee", last_name="NoEmail", email=None,
                 tags="Active", lists="APAC Wizards"),
     ])

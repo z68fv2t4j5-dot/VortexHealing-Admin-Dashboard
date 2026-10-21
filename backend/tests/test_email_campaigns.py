@@ -55,3 +55,9 @@ def test_filter_endpoint_returns_matches(client):
     data = client.get("/api/students/filter", params={"lists": "Global Wizards"}).json()
     assert data["count"] == 1
     assert data["students"][0]["email"] == "ben@example.com"
+
+
+def test_options_offer_only_the_apac_list_and_its_full_word_class_tags(client):
+    # Omega is on a Global Wizards student only; SRA, 26-01-S1 and MS-Cert are not class names
+    assert client.get("/api/email/options").json() == {
+        "lists": ["APAC Wizards"], "tags": ["Foundational", "Sensing I"]}
