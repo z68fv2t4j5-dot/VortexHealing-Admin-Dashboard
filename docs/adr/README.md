@@ -10,3 +10,4 @@ Every file has exactly one row here and ids are sequential (`adr-register`). `AG
 | 0002 | SQLite and local-only student data | Accepted | 2026-10-05 |
 | 0003 | Semantic handouts search with local embeddings | Accepted | 2026-10-20 |
 | 0004 | Local Qwen via LM Studio for AI features | Accepted | 2026-10-05 |
+| 0005 | Raw agent transcripts stay local | Accepted | 2026-10-21 |

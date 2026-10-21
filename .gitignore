@@ -11,6 +11,8 @@ _bmad/config.user.toml
 _bmad/custom/*.user.toml
 # harness session state (transcript sync marker)
 .harness/
+# raw agent transcripts can contain student data; they stay on this machine (ADR-0005)
+docs/sessions/raw/
 # build, test and coverage output
 coverage.xml
 htmlcov/
