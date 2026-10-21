@@ -18,9 +18,11 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 
 ## Open threads
 
+- Raw transcripts are gitignored (ADR-0005); session logs must carry no student names or emails.
+
 - Class rules: Daniel to correct the ⚠ prerequisite rows and pick the source of class-completion history; the reminder scheduler waits on both.
 - Email delivery: no mail transport; decide the sending account and keep a human approval step before any real send.
-- Parked retrospective: BMAD's `bmad-retrospective` skill fails to install (YAML error, reported upstream as bmad-code-org/BMAD-METHOD#3130). When it is fixed: `npx skills add bmad-code-org/BMAD-METHOD -a codex -s bmad-retrospective -y`, rename `_bmad/custom/bmad-retrospective.toml.parked` back to `.toml`, and restore the original enforcement on "Prune on schedule" in AGENTS.md Part A (constitution v1.1.2).
+- Parked retrospective: BMAD's `bmad-retrospective` skill fails to install (YAML error, reported upstream as bmad-code-org/BMAD-METHOD#3130). When it is fixed: `npx skills add bmad-code-org/BMAD-METHOD -a codex -s bmad-retrospective -y`, rename `_bmad/custom/bmad-retrospective.toml.parked` back to `.toml`, and restore the original enforcement on "Prune on schedule" in AGENTS.md Part A (bump the constitution version).
 - Old `/api/emails` router (`backend/app/api/emails.py`) uses fields the `EmailCampaign` model no longer has; nothing calls it. Remove or fix.
 
 ## Traps, in the order they will bite

@@ -25,4 +25,4 @@ The push gate (`promotions`) requires the `## Lessons promoted` section in every
 
 ## Raw transcripts: `docs/sessions/raw/<host>/<YYMMDDhhmm>-<file>`
 
-Copied by `python scripts/save_transcript.py` from the Claude Code, Codex, Gemini CLI and Antigravity folders at `harness-close` step 9. Cursor has no file export; note it in the session log. Transcripts are committed as they are. `secrets-scan` runs over them; a hit blocks the commit until the secret is removed at its source and rotated.
+Copied by `python scripts/save_transcript.py` from the Claude Code, Codex, Gemini CLI and Antigravity folders at `harness-close` step 9. Cursor has no file export; note it in the session log. In this repository they are not committed: `docs/sessions/raw/` is gitignored because a transcript can hold student data the agent read, and the repository must not (ADR-0005). They stay in the working copy on this machine. `secrets-scan` still runs over them; a hit means the secret is removed at its source and rotated.
