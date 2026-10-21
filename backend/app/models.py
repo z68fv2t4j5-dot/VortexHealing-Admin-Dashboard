@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, Enum, ForeignKey, Table
+from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, Enum, ForeignKey, Table, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from datetime import datetime
@@ -97,6 +97,16 @@ class EmailRecipient(Base):
     sent_at = Column(DateTime)
     status = Column(String, default="pending")  # pending, sent, failed
     error_message = Column(String)
+
+class ClassReminder(Base):
+    """One approved reminder per class and stage; its presence keeps the reminder off the due list"""
+    __tablename__ = "class_reminders"
+    __table_args__ = (UniqueConstraint("class_id", "stage"),)
+    id = Column(Integer, primary_key=True)
+    class_id = Column(Integer, ForeignKey("classes.id"))
+    stage = Column(String)  # 2m, 1m, 2w
+    campaign_id = Column(Integer, ForeignKey("email_campaigns.id"))
+    approved_at = Column(DateTime, default=datetime.utcnow)
 
 class GrowthIdea(Base):
     __tablename__ = "growth_ideas"

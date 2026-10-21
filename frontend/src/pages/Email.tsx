@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from 'react-query';
 import axios from 'axios';
 import { Mail, Send, Filter, Tag, X } from 'lucide-react';
 import '../styles/Pages.css';
+import RemindersDue from '../components/RemindersDue';
 
 interface Campaign {
   id: number;
@@ -266,6 +267,8 @@ export default function Email() {
           <Mail size={18} /> New Campaign
         </button>
       </div>
+
+      <RemindersDue />
 
       {campaigns.length === 0 ? (
         <div style={{

@@ -21,6 +21,8 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
 | `backend/seed_*.py` | Imports students and classes from files outside the repository | AGENTS.md Part B (data) |
 | `backend/tests/` | pytest suite; email campaign API so far | AGENTS.md Part B (test) |
 | `backend/app/class_rules.py` | Flowchart prerequisites as data; completed classes from tags; eligibility; next class | `docs/CLASS_RULES.md`, ADR-0006 |
+| `backend/app/reminders.py`, `backend/app/api/reminders.py` | Which reminders are due and to whom; approve records one sent campaign | ADR-0007 |
+| `frontend/src/components/RemindersDue.tsx` | "Reminders due" panel at the top of the Email page | ADR-0007 |
 | `docs/CLASS_RULES.md` | How to read the flowchart, decisions on unusual boxes, reminder timing | itself |
 
 <!-- verify: exists backend/app/api/email_campaigns.py -->
@@ -34,8 +36,9 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
 1. Student import: `All Contacts/*.csv` (outside repo) -> `backend/seed_students.py` -> `students` table -> `/api/students` -> Students page. Files: `backend/seed_students.py`, `backend/app/api/students.py`.
 2. Email campaign: Email page loads `GET /api/email/options` (APAC Wizards list, full-word class tags) -> composer -> `POST /api/email/preview` (live recipient count from tags/lists) -> `POST /api/email/campaigns` (draft) -> `POST /api/email/send?campaign_id=` -> status `sent` and one `email_recipients` row per student. Files: `frontend/src/pages/Email.tsx`, `backend/app/api/email_campaigns.py`.
 3. Handouts: 100 PDF/DOC handouts -> text -> ~500-char chunks -> `all-MiniLM-L6-v2` embeddings -> `backend/handouts_index.json` (154 MB, gitignored) -> `GET /api/handouts/search` (cosine score 0-100, +20 filename match, +10 text match) and `POST /api/handouts/ask` (top chunks to Qwen). The index loads at startup; `/api/handouts/reload` rebuilds it.
-4. Eligibility: student tags -> `class_for` (full-word class tags only) -> `completed_from_tags` (adds the classes each one hangs off) -> `is_eligible` / `next_class` against the `classes` schedule. Files: `backend/app/class_rules.py`. Nothing calls it from the UI yet.
-5. AI features: Chat, Tasks and Handouts call LM Studio at `localhost:1234/v1`; pages must handle it being down.
+4. Eligibility: student tags -> `class_for` (full-word class tags only) -> `completed_from_tags` (adds the classes each one hangs off) -> `is_eligible` / `next_class` against the `classes` schedule. Files: `backend/app/class_rules.py`. Used by the reminders flow.
+5. Reminders: Email page -> `GET /api/reminders/due` (`due_reminders`: each class's 2-month, 1-month and 2-week dates, offered for 7 days, minus approved ones in `class_reminders`; recipients are eligible APAC Wizards who have not done the class) -> person edits and approves -> `POST /api/reminders/approve` -> sent campaign + recipient rows + `class_reminders` row. Files: `backend/app/reminders.py`, `backend/app/api/reminders.py`, `frontend/src/components/RemindersDue.tsx`.
+6. AI features: Chat, Tasks and Handouts call LM Studio at `localhost:1234/v1`; pages must handle it being down.
 
 ## Boundaries and invariants
 
@@ -43,6 +46,8 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
   <!-- verify: present '^\*\.db$' in .gitignore -->
 - **Email send records, it does not deliver.** `/api/email/send` marks the campaign `sent` and writes `email_recipients` rows with status `pending`; no mail transport is wired up yet. Bought by: Phase 1 scope in `docs/EMAIL_CAMPAIGN_PLAN.md`.
   <!-- verify: absent 'smtplib|sendgrid|nodemailer' in backend/app -->
+- **No reminder is recorded without a person's click, and none twice.** There is no background scheduler; `class_reminders` is unique on (class_id, stage). Bought by: ADR-0007.
+  <!-- verify: present 'UniqueConstraint\("class_id", "stage"\)' in backend/app -->
 - **Tests never touch the real database.** `backend/tests/conftest.py` sets `DATABASE_URL` to in-memory SQLite before the app imports. Bought by: the suite running beside a live `vortexhealing.db`.
   <!-- verify: present 'DATABASE_URL.. = .sqlite://' in backend/tests -->
   <!-- verify: exists AGENTS.md -->
@@ -58,5 +63,4 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
 ## Deliberately not built yet
 
 - Real email delivery: add when campaigns are ready to go to students (needs a mail account and an approval step).
-- Reminder scheduler and "reminders due" panel: next; builds on `class_rules.next_class` and the timing in `docs/CLASS_RULES.md`.
 - Frontend tests: add when a page grows logic beyond calling the API.
