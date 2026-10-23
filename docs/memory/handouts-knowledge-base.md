@@ -1,12 +1,12 @@
 ---
 name: handouts-knowledge-base
-description: Handouts search is semantic (local embeddings, chunk-level); design and limits live in ADR-0003 and the architecture map
+description: Handouts search is a catalogue plus hybrid FTS5/embedding index kept outside the repo; design in ADR-0008
 metadata:
   type: project
 ---
 
-**Fact:** Handouts search ranks ~500-character chunks by embedding similarity plus a keyword bonus, and passes matching chunks to Qwen. The 154 MB index is local only.
+**Fact:** `backend/handouts/` keeps one current file per handout, indexes it into `kb.sqlite` in `HANDOUTS_KB_DIR` (outside the repo), and searches by keywords plus nomic embeddings. Stories 2-4 (answers, knowledge map, teacher notes) follow the plan.
 
-**Why:** Keyword search missed concept questions like "what class is life essences introduced".
+**Why:** v1 read no `.doc` files and mixed retired versions with current ones.
 
-**Authority:** ADR-0003
+**Authority:** ADR-0008

@@ -1,184 +1,120 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.orm import Session
-from app.core.database import get_db
-from pydantic import BaseModel
-from handouts_service import HandoutsIndexer
+import re
+import threading
+from typing import Optional
+
 import httpx
-import sys
-import os
+from fastapi import APIRouter, HTTPException
+from fastapi.responses import FileResponse
+from pydantic import BaseModel
+
+from app.core.config import settings
+from handouts import ingest, source_dir, store
+from handouts.retrieve import search
 
 router = APIRouter()
 
-# Initialize indexer eagerly at module load
-try:
-    _indexer = HandoutsIndexer()
-except Exception as e:
-    _indexer = None
+QUESTION_WORDS = ("what", "how", "why", "which", "where", "when", "who", "does", "do", "is", "are", "can", "should")
+SYSTEM_PROMPT = """You answer questions about VortexHealing class handouts using only the numbered sources given.
+Cite sources as [n] after each claim. When you combine sources into a conclusion that none of them states,
+start that sentence with "Inference:". If the sources do not answer the question, say "The handouts don't cover
+this" and name the closest sources. Never add knowledge from outside the sources. Write plain prose, with short
+headings when the answer has parts (what it is, where it comes from, which tools, which class)."""
 
-def get_indexer():
-    global _indexer
-    if _indexer is None:
-        _indexer = HandoutsIndexer()
-    return _indexer
 
 class HandoutsQuery(BaseModel):
+    q: str
+    mode: str = "auto"
+    history: list[dict] = []
+
+
+class AskQuery(BaseModel):
     question: str
 
-class SearchResult(BaseModel):
-    filename: str
-    preview: str
-    score: int
+
+def wants_answer(q: str, mode: str) -> bool:
+    if mode != "auto":
+        return mode == "ask"
+    words = q.lower().split()
+    return q.strip().endswith("?") or (bool(words) and words[0] in QUESTION_WORDS) or len(words) >= 6
+
+
+async def answer_from(question: str, passages: list[dict]) -> tuple[Optional[str], Optional[str]]:
+    """Returns (answer, error). Citations that point at no source are removed."""
+    sources = "\n\n".join(f"[{i}] {p['title']} — {p['heading_path'] or 'start'}\n{p['text']}"
+                          for i, p in enumerate(passages, 1))
+    try:
+        async with httpx.AsyncClient(timeout=180) as client:
+            r = await client.post(f"{settings.LM_STUDIO_URL}/chat/completions", json={
+                "model": settings.QWEN_MODEL,
+                "messages": [{"role": "system", "content": SYSTEM_PROMPT},
+                             {"role": "user", "content": f"Sources:\n\n{sources}\n\nQuestion: {question}"}],
+                "temperature": 0.2, "max_tokens": 3000, "reasoning_effort": "low"})
+            r.raise_for_status()
+            text = r.json()["choices"][0]["message"]["content"] or ""
+    except (httpx.HTTPError, KeyError, ValueError) as e:
+        return None, f"Qwen is not available ({type(e).__name__}). Is LM Studio running with the model loaded?"
+    valid = range(1, len(passages) + 1)
+    return re.sub(r"\[(\d+)\]", lambda m: m.group(0) if int(m.group(1)) in valid else "", text).strip(), None
+
+
+@router.post("/handouts/query")
+async def query_handouts(query: HandoutsQuery):
+    asked = wants_answer(query.q, query.mode)
+    # Story 2 rewrites follow-ups properly; until then the previous question gives the search its context.
+    previous = [h.get("q", "") for h in query.history[-1:]]
+    passages = search(" ".join([*previous, query.q]), limit=10)
+    answer, error = (await answer_from(query.q, passages[:8])) if asked and passages else (None, None)
+    if asked and not passages:
+        answer = "The handouts don't cover this: nothing matched the question."
+    return {"query": query.q, "mode": "ask" if asked else "search", "passages": passages, "cards": [],
+            "answer": answer, "answer_error": error}
+
 
 @router.get("/handouts/search")
 async def search_handouts(q: str):
-    """Search handouts by keyword"""
-    indexer = get_indexer()
-    results = indexer.search(q, limit=5)
-    return {"results": results, "query": q}
+    return {"query": q, "results": search(q, limit=10)}
+
 
 @router.post("/handouts/ask")
-async def ask_handouts(query: HandoutsQuery):
-    """Ask a question and get answer from Qwen with handout references"""
+async def ask_handouts(query: AskQuery):
+    passages = search(query.question, limit=8)
+    answer, error = await answer_from(query.question, passages) if passages else (None, None)
+    return {"question": query.question, "answer": answer or error, "passages": passages}
 
-    indexer = get_indexer()
-    all_search_results = []
 
-    # First, search for relevant handouts
-    search_results = indexer.search(query.question, limit=3)
-    all_search_results.extend(search_results)
-
-    # Build context from top results
-    context = "Relevant handout excerpts:\n\n"
-    if search_results:
-        for result in search_results:
-            context += f"From '{result['filename']}':\n{result['preview']}\n\n"
-    else:
-        context += "No handout excerpts found for your question.\n"
-
-    # First attempt at answer
-    prompt = f"""Based on these handout excerpts, answer the user's question:
-
-{context}
-
-User Question: {query.question}
-
-If the provided excerpts don't contain enough information to fully answer the question, respond with:
-[NEEDS_MORE_INFO: suggested search terms]
-
-Otherwise, answer the question clearly, citing which handout each piece of information came from."""
-
+@router.get("/handouts/status")
+async def handouts_status():
+    if not settings.HANDOUTS_DIR:
+        return {"configured": False, "scanning": False}
+    conn = store.connect(ingest.db_path())
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.post(
-                "http://localhost:1234/v1/chat/completions",
-                json={
-                    "model": "qwen",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "temperature": 0.7,
-                    "max_tokens": 1000
-                },
-                timeout=60.0
-            )
-
-            if response.status_code != 200:
-                raise Exception(f"Qwen error: {response.text}")
-
-            result = response.json()
-            answer = result['choices'][0]['message']['content']
-
-            # Check if Qwen needs more information
-            if "[NEEDS_MORE_INFO:" in answer:
-                # Extract suggested search terms
-                import re
-                match = re.search(r'\[NEEDS_MORE_INFO:\s*([^\]]+)\]', answer)
-                if match:
-                    follow_up_query = match.group(1).strip()
-                    # Do a follow-up search
-                    follow_up_results = indexer.search(follow_up_query, limit=2)
-                    all_search_results.extend(follow_up_results)
-
-                    # Build expanded context
-                    expanded_context = context + f"Follow-up search for '{follow_up_query}':\n\n"
-                    for result in follow_up_results:
-                        expanded_context += f"From '{result['filename']}':\n{result['preview']}\n\n"
-
-                    # Get final answer with expanded context
-                    final_prompt = f"""Based on these handout excerpts, answer the user's question:
-
-{expanded_context}
-
-User Question: {query.question}
-
-Answer the question clearly, citing which handout each piece of information came from. If still no information is found, explain what couldn't be found."""
-
-                    response = await client.post(
-                        "http://localhost:1234/v1/chat/completions",
-                        json={
-                            "model": "qwen",
-                            "messages": [{"role": "user", "content": final_prompt}],
-                            "temperature": 0.7,
-                            "max_tokens": 1000
-                        },
-                        timeout=60.0
-                    )
-
-                    if response.status_code == 200:
-                        result = response.json()
-                        answer = result['choices'][0]['message']['content']
-                else:
-                    # Remove the [NEEDS_MORE_INFO] marker if present
-                    answer = answer.replace(answer[answer.find("[NEEDS_MORE_INFO:"):answer.find("]")+1], "").strip()
-
-    except Exception as e:
-        answer = f"Error getting response from Qwen: {str(e)}"
-
-    # Remove duplicates from all_search_results
-    seen = set()
-    unique_results = []
-    for r in all_search_results:
-        key = (r["filename"], r["relative_path"])
-        if key not in seen:
-            seen.add(key)
-            unique_results.append(r)
-
-    return {
-        "question": query.question,
-        "answer": answer,
-        "sources": [
-            {
-                "filename": r["filename"],
-                "path": r["relative_path"],
-                "relevance": r["score"]
-            } for r in unique_results
-        ]
-    }
+        return {"configured": True, "scanning": ingest.is_running(), "last_scan": store.get_meta(conn, "last_scan"),
+                **store.counts(conn)}
+    finally:
+        conn.close()
 
 
-@router.get("/handouts/reload")
-async def reload_handouts():
-    """Force reload the handouts index"""
-    global _indexer
-    _indexer = None  # Clear the cache
-    indexer = get_indexer()  # Reinitialize
-    return {
-        "status": "reloaded",
-        "document_count": len(indexer.index.get("documents", []))
-    }
+@router.post("/handouts/rescan")
+async def rescan_handouts():
+    if ingest.is_running():
+        return {"started": False, "reason": "a scan is already running"}
+    threading.Thread(target=ingest.run_quietly, daemon=True).start()
+    return {"started": True}
 
 
-@router.get("/handouts/list")
-async def list_handouts():
-    """List all indexed handouts"""
-    indexer = get_indexer()
-    docs = indexer.index.get("documents", [])
-    return {
-        "count": len(docs),
-        "documents": [
-            {
-                "filename": d["filename"],
-                "relative_path": d["relative_path"],
-                "word_count": d["word_count"]
-            } for d in docs
-        ]
-    }
-
+@router.get("/handouts/file/{document_id}")
+async def handout_file(document_id: int):
+    conn = store.connect(ingest.db_path())
+    try:
+        row = conn.execute("select path from documents where id = ?", (document_id,)).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        raise HTTPException(404, "No such handout")
+    root = source_dir().resolve()
+    path = (root / row["path"]).resolve()
+    if root not in path.parents or not path.exists():
+        raise HTTPException(404, "Handout file not found")
+    # The PDF of the same version reads better in a browser than the .doc it was indexed from.
+    pdf = path.with_suffix(".pdf")
+    return FileResponse(pdf if pdf.exists() else path)

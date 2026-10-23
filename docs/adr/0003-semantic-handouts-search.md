@@ -1,6 +1,6 @@
 # ADR-0003: Semantic handouts search with local embeddings
 
-**Status:** Accepted. **Date:** 2026-10-20. **Trigger:** keyword search missed natural questions such as "what class is life essences introduced".
+**Status:** Superseded by ADR-0008. **Date:** 2026-10-20. **Trigger:** keyword search missed natural questions such as "what class is life essences introduced".
 
 ## Context
 

@@ -121,6 +121,9 @@ A rule enters Part A only if it names (a) the value it adds, (b) how it is enfor
 - Session logs, plans and every other committed file carry no student names, emails or contact details; refer to counts or anonymised examples.
 - Pages work on mobile widths as well as desktop.
 - Success criteria: dashboard lists all students, searchable by name or email; Classes shows the schedule; Chat works when LM Studio is running; email campaigns segment by tags and lists; no errors in the browser console; seed scripts complete without errors.
+- Handout text is confidential teaching material: no handout text, index, glossary or eval question enters the repository; handout tests use invented text (ADR-0008). Data lives in `HANDOUTS_KB_DIR`.
+- A new key in `backend/.env` needs a field on `Settings` in `backend/app/core/config.py` first: pydantic rejects unknown keys and the backend will not start.
+  <!-- verify: present 'HANDOUTS_KB_DIR: str' in backend/app/core -->
 
 <!-- bmad:context -->
 <!-- Verified 2026-10-20 against 4dbcde8. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->

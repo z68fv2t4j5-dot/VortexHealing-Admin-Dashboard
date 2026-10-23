@@ -2,9 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
+import threading
 
 from app.core.config import settings
 from app.core.database import Base, engine
+from handouts import ingest as handouts_ingest
 from app.api import tasks, students, classes, events, emails, ideas, auth, documents, global_students, admin, ai_tasks, handouts, email_campaigns, reminders
 
 logging.basicConfig(level=logging.INFO)
@@ -15,6 +17,9 @@ async def lifespan(app: FastAPI):
     logger.info("🚀 Starting VortexHealing Admin Dashboard")
     Base.metadata.create_all(bind=engine)
     logger.info("✅ Database initialized")
+    if settings.HANDOUTS_DIR:
+        # Picks up new or revised handouts; unchanged files are skipped, so this is quick.
+        threading.Thread(target=handouts_ingest.run_quietly, daemon=True).start()
     yield
     logger.info("🛑 Shutting down")
 

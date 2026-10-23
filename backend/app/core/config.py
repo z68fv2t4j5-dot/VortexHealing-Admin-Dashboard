@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     MAIL_PASSWORD: Optional[str] = None
     MAIL_FROM: str = "noreply@vortexhealing.com"
     FRONTEND_URL: str = "http://localhost:3000"
+    HANDOUTS_DIR: Optional[str] = None
+    HANDOUTS_KB_DIR: str = "~/Documents/Handouts-KB"
 
     class Config:
         env_file = ".env"
