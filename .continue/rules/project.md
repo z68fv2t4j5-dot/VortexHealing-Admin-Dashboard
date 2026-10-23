@@ -5,7 +5,7 @@ alwaysApply: true
 
 Summary of AGENTS.md for small local models. AGENTS.md wins on any conflict.
 
-Stack: React 18 + TypeScript + Vite (frontend/, port 3000, /api proxied to 8000);
+Stack: React 18 + TypeScript + Vite (frontend/, port 3000, /api proxied to 8001);
 FastAPI + SQLAlchemy + SQLite (backend/). React Query v3 + axios with relative
 /api URLs. Inline styles, primary #667eea, lucide-react icons. No UI libraries.
 

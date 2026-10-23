@@ -17,7 +17,7 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 2. `git status --short && git log --oneline -3`
 3. `cd backend && python -m pytest -q`
 4. `cd backend && python -m handouts status` shows the counts above; `python -m handouts eval` prints the hit total.
-5. `curl -s localhost:8000/api/handouts/status` (backend running) returns `"configured": true`.
+5. `curl -s localhost:8001/api/handouts/status` (backend running) returns `"configured": true`.
 
 ## Open threads
 
@@ -34,7 +34,7 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 
 1. `python3` must be 3.11+; on this Mac that relies on `~/.local/bin` being first on PATH (set in `~/.zshrc`).
 2. Every new key in `backend/.env` needs a field on `Settings` in `backend/app/core/config.py` first; that class forbids unknown keys and the whole backend fails to start.
-3. Port 8000 may be held by a static file server started in `~/Documents/Finance`; the dashboard frontend proxies `/api` to 8000, so stop it before running the backend.
+3. The dashboard backend runs on port 8001, because Daniel's finances app uses 8000. Pages must call relative `/api` URLs; a hard-coded `localhost:8000` reaches the wrong app.
 4. LM Studio: load `qwen/qwen3.8-27b` at 49152 context and `text-embedding-nomic-embed-text-v1.5`; without the embedder, search falls back to keywords. In Continue, Qwen needs `maxTokens: 12000` and `reasoning_effort: low` or it spends its whole reply thinking.
 5. Never commit a check that reads real student data or handout text; run it outside the repository and record only counts.
 6. Changing a model does not change its existing table; back up `backend/vortexhealing.db` and rebuild the table.

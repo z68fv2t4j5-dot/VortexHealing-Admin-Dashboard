@@ -4,7 +4,7 @@ import axios from 'axios';
 import { TrendingUp, AlertCircle, Users, BookOpen, Calendar, CheckSquare } from 'lucide-react';
 import '../styles/Dashboard.css';
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = '/api';
 
 export default function Dashboard() {
   const { data: tasks = [] } = useQuery('tasks', () =>

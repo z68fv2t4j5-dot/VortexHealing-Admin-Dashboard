@@ -156,7 +156,8 @@ Local admin tool for one VortexHealing teacher: students, classes and eligibilit
 - Python 3.11+ for the harness scripts and hooks; macOS `/usr/bin/python3` is 3.9 and fails the lint selftest.
 - Tests: `cd backend && python -m pytest --cov=app --cov-branch --cov-report=xml:../coverage.xml`, after `pip install -r backend/requirements-test.txt`. Never install `requirements.txt` just to test; it pulls the ML stack.
 - The frontend has no tests: after changing a page, open it at `localhost:3000` and check the browser console is clean before committing.
-- `./start.sh` opens backend (8000) and frontend (3000) in two Terminal windows; the frontend proxies `/api` to 8000, so use relative `/api` URLs.
+- `./start.sh` opens backend (8001) and frontend (3000) in two Terminal windows; the frontend proxies `/api` to 8001, so use relative `/api` URLs. Port 8000 belongs to Daniel's finances app on this Mac.
+  <!-- verify: absent 'localhost:8000' in frontend/src -->
 - After the weekly CSV update in `All Contacts/`, re-run `backend/venv/bin/python backend/seed_students.py` and compare the student count with the CSV row count; `seed_classes.py` should leave 27 classes.
   <!-- verify: exists backend/tests/test_email_campaigns.py -->
 

@@ -27,7 +27,7 @@ This project uses the MKC Agentic Development Harness to enable structured colla
 cd backend
 source venv/bin/activate
 pip install -r requirements.txt
-python main.py  # Runs on localhost:8000
+python main.py  # Runs on localhost:8001
 
 # Frontend (separate terminal)
 cd frontend

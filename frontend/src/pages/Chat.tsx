@@ -4,7 +4,7 @@ import axios from 'axios';
 import { Send, Trash2 } from 'lucide-react';
 import '../styles/Pages.css';
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = '/api';
 
 export default function Chat() {
   const [message, setMessage] = useState('');

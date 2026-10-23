@@ -91,7 +91,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Backend runs on `http://localhost:8000`
+Backend runs on `http://localhost:8001`
 
 ### Frontend Setup
 
@@ -111,8 +111,8 @@ docker-compose up
 
 ## API Documentation
 
-- **Interactive Docs**: http://localhost:8000/docs
-- **ReDoc**: http://localhost:8000/redoc
+- **Interactive Docs**: http://localhost:8001/docs
+- **ReDoc**: http://localhost:8001/redoc
 
 ## Project Structure
 
