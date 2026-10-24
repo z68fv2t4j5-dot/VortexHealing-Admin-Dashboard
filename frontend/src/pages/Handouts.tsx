@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from 'react-query';
 import axios from 'axios';
-import { Search, MessageCircle, BookOpen, RefreshCw, Sparkles, ExternalLink } from 'lucide-react';
+import { Search, MessageCircle, BookOpen, RefreshCw, Sparkles, ExternalLink, Layers } from 'lucide-react';
+import { EntityCard, EntityCardById, EntityCardData, KnowledgeBrowse } from '../components/HandoutsKnowledge';
 import '../styles/Pages.css';
 
 type Mode = 'auto' | 'search' | 'ask';
@@ -27,6 +28,7 @@ interface QueryResult {
   answerError: string;
   fallback: boolean;
   asked: boolean;
+  cards: EntityCardData[];
 }
 
 type Phase = 'searching' | 'thinking' | 'writing' | null;
@@ -93,11 +95,13 @@ export default function Handouts() {
   const [phase, setPhase] = useState<Phase>(null);
   const loading = phase !== null;
   const [error, setError] = useState('');
+  const [view, setView] = useState<'ask' | 'browse'>('ask');
+  const [openCard, setOpenCard] = useState<number | null>(null);
 
   const { data: status } = useQuery(
     'handouts-status',
     () => axios.get('/api/handouts/status').then(r => r.data).catch(() => null),
-    { refetchInterval: (data: any) => (data?.scanning ? 3000 : false) }
+    { refetchInterval: (data: any) => (data?.scanning ? 3000 : data?.knowledge?.running ? 30000 : false) }
   );
 
   // Reads newline-delimited JSON events: passages first, then the answer as Qwen writes it.
@@ -106,8 +110,9 @@ export default function Handouts() {
     if (!q) return;
     setPhase('searching');
     setError('');
+    setOpenCard(null);
     let current: QueryResult = { query: q, searchedAs: q, rewritten: false, searches: [], passages: [],
-      answer: '', answerError: '', fallback: false, asked: false };
+      answer: '', answerError: '', fallback: false, asked: false, cards: [] };
     setResult(current);
     const update = (patch: Partial<QueryResult>) => { current = { ...current, ...patch }; setResult(current); };
     try {
@@ -129,7 +134,8 @@ export default function Handouts() {
         for (const line of lines.filter(Boolean)) {
           const event = JSON.parse(line);
           if (event.type === 'sources') {
-            update({ searchedAs: event.question, rewritten: event.rewritten, searches: event.searches, passages: event.passages });
+            update({ searchedAs: event.question, rewritten: event.rewritten, searches: event.searches, passages: event.passages,
+              cards: event.cards || [] });
           } else if (event.type === 'thinking') {
             update({ asked: true });
             setPhase('thinking');
@@ -148,6 +154,11 @@ export default function Handouts() {
       setError('The handouts service did not respond. Is the backend running?');
     }
     setPhase(null);
+  };
+
+  const buildMap = async () => {
+    await axios.post('/api/handouts/knowledge/run').catch(() => null);
+    setTimeout(() => queryClient.invalidateQueries('handouts-status'), 1000);
   };
 
   const rescan = async () => {
@@ -181,21 +192,48 @@ export default function Handouts() {
             <RefreshCw size={14} /> Rescan
           </button>
         </p>
+        {status?.knowledge && (
+          <p style={{ color: '#999', margin: '0.25rem 0 0', fontSize: '0.85rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            Knowledge map: {status.knowledge.entities} entries • {status.knowledge.facts} facts
+            {status.knowledge.running
+              ? <span style={{ color: '#667eea' }}>• being built ({status.knowledge.sections_unread} sections still to read)</span>
+              : status.knowledge.sections_unread > 0 && (
+                <>
+                  <span>• {status.knowledge.sections_unread} sections not read yet</span>
+                  <button onClick={buildMap} title="Qwen reads the new sections; this can take hours for many"
+                    style={{ padding: '0.2rem 0.6rem', background: '#f0f0f0', border: 'none', borderRadius: '6px', cursor: 'pointer', fontSize: '0.8rem' }}>
+                    Build
+                  </button>
+                </>
+              )}
+          </p>
+        )}
       </div>
 
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
         {MODES.map(m => (
           <button
             key={m.id}
-            onClick={() => setMode(m.id)}
-            style={{ padding: '0.6rem 1.25rem', background: mode === m.id ? '#667eea' : '#f0f0f0',
-              color: mode === m.id ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer',
+            onClick={() => { setMode(m.id); setView('ask'); }}
+            style={{ padding: '0.6rem 1.25rem', background: view === 'ask' && mode === m.id ? '#667eea' : '#f0f0f0',
+              color: view === 'ask' && mode === m.id ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer',
               fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
           >
             {m.icon} {m.label}
           </button>
         ))}
+        <button
+          onClick={() => setView('browse')}
+          title="Every tool, class and kind of conditioning in the knowledge map"
+          style={{ padding: '0.6rem 1.25rem', background: view === 'browse' ? '#667eea' : '#f0f0f0',
+            color: view === 'browse' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer',
+            fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}
+        >
+          <Layers size={18} /> Browse
+        </button>
       </div>
+
+      {view === 'browse' ? <KnowledgeBrowse /> : (<>
 
       <div style={{ ...card, marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -240,6 +278,15 @@ export default function Handouts() {
           {result.rewritten && <>Understood as: <em>{result.searchedAs}</em></>}
           {result.searches.length > 0 && <>{result.rewritten && ' • '}Searched for: {result.searches.join(' · ')}</>}
         </p>
+      )}
+
+      {openCard !== null && (
+        <div style={{ marginBottom: '1.5rem' }}><EntityCardById id={openCard} onOpen={setOpenCard} /></div>
+      )}
+      {openCard === null && result && result.cards.length > 0 && (
+        <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
+          {result.cards.map(c => <EntityCard key={c.id} data={c} onOpen={setOpenCard} />)}
+        </div>
       )}
 
       {result && result.asked && (
@@ -290,6 +337,7 @@ export default function Handouts() {
           <p style={{ fontSize: '0.9rem' }}>Auto answers questions and searches everything else.</p>
         </div>
       )}
+      </>)}
     </div>
   );
 }

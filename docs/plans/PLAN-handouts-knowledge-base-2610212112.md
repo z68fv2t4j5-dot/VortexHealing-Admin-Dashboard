@@ -1,5 +1,13 @@
 # Plan (feature): handouts knowledge base (v2 of Handouts)
-Status: story 1 done 2026-10-23; story 2 done 2026-10-23 (stories 3-4 open).
+Status: story 1 done 2026-10-23; story 2 done 2026-10-23; story 3 done 2026-10-24 (story 4 open).
+
+Departures in story 3, as built (Daniel chose the knowledge map before teacher notes):
+- Extraction runs with thinking off and a non-strict JSON schema plus an example of the shape: with the schema enforced strictly, Qwen returned empty lists in 10 tokens; without an example it mostly did too. At most 15 entities and 20 facts per section, `max_tokens` 6000: longer replies were cut off mid-JSON.
+- Readings are cached by section text hash (`extraction_cache`), so `ingest --full` never repeats the run; entities and facts are rebuilt from the cache by `apply-knowledge` in seconds.
+- Predicates: `done_in_class` (with the how in `detail`) was added for comparisons between classes; `used_for` dropped in favour of `releases`.
+- Class names resolve against the flowchart and `HANDOUTS_KB_DIR/handout_classes.yaml` (handout family -> class, drafted by Claude for Daniel to correct); only those are typed as classes.
+- Answers that name an entity get its card, up to 4 passages behind its key facts, and a cited "Knowledge map" list. Cards also appear in search mode; the page gained a Browse tab and a Build button. A CLI run writes a heartbeat so the page does not start a second one.
+- Full run 2026-10-24: 1,370 sections at 4 at a time, about 3.5 hours; 4 sections still fail (cut-off replies) and are retried by every run. Result 6,331 entries and 13,551 facts.
 
 Departures in story 2, as built (Daniel asked for better answers without the extra wait):
 - Measured first: the backend named the model `qwen3.8-27b`, so LM Studio loaded a second copy (other format, 8,192 context); with the identifier `qwen/qwen3.8-27b` the same answer took 17 s instead of 64 s and was correct instead of hedged.

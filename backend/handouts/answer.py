@@ -11,13 +11,22 @@ from typing import AsyncIterator, Optional
 
 import httpx
 
-from handouts.retrieve import daniel_glossary, fuse, search
+from handouts import knowledge, store
+from handouts.retrieve import _passages, daniel_glossary, fuse, search
 
 MAX_SOURCES = 8  # simple questions; multi-part ones get MAX_SOURCES_MULTIPART
 MAX_SOURCES_MULTIPART = 10
 SOURCE_WORD_BUDGET = 6500  # about 9,000 tokens, leaving room for the answer
 MIN_CITED_SHARE = 0.5
 HISTORY_TURNS = 3
+MAX_EVIDENCE = 4  # extra passages pulled in because a knowledge-map fact points at them
+MAP_LINES = 16
+# Facts most useful for answering come first.
+FACT_ORDER = ["introduced_in", "done_in_class", "releases", "is_source_of", "requires", "located_in",
+              "is_part_of", "related_to"]
+FACT_WORDS = {"introduced_in": "is introduced in", "done_in_class": "is done in", "releases": "releases",
+              "is_source_of": "is a source of", "is_part_of": "is part of", "requires": "requires",
+              "located_in": "is located in", "related_to": "is related to"}
 
 ANSWER_PROMPT = """You answer questions about VortexHealing class handouts using only the numbered sources given.
 Cite sources as [n] after each claim. When you combine sources into a conclusion that none of them states,
@@ -27,7 +36,10 @@ headings when the answer has parts (what it is, where it comes from, which tools
 Be concise: about 250 words unless the question asks for a list, a protocol or a comparison.
 Each source is labelled with its handout's title. A handout titled "<Class> Review" is the review for that class,
 so "in this class" inside it means that class.
-Teacher notes, when given, come from the teacher and override the handouts where they disagree."""
+Teacher notes, when given, come from the teacher and override the handouts where they disagree.
+A "Knowledge map" list may follow the sources: facts already taken from those sources, each ending with its
+source number. Use it to connect and compare classes (for example how something is done in one class and
+another), and cite the source numbers it gives."""
 
 REWRITE_PROMPT = """Rewrite the follow-up question as one complete question that makes sense on its own,
 using the conversation for what "it", "that", "they" and similar words refer to. Reply with the question only."""
@@ -130,6 +142,36 @@ def gather(question: str, searches: list[str], conn=None, limit: int = MAX_SOURC
     return chosen
 
 
+def add_evidence(conn, passages: list[dict], cards: list[dict]) -> tuple[list[dict], list[str]]:
+    """Adds the passages behind the cards' key facts and returns the knowledge-map lines that cite them."""
+    passages = list(passages)
+    by_section = {}
+    for i, p in enumerate(passages, 1):
+        sec = conn.execute("select section_id from chunks where id = ?", (p["chunk_id"],)).fetchone()
+        if sec:
+            by_section.setdefault(sec[0], i)
+    lines, added = [], 0
+    for c in cards:
+        for f in sorted(c["facts"], key=lambda f: FACT_ORDER.index(f["predicate"])):
+            section_id = f["source"]["section_id"]
+            if section_id not in by_section and added < MAX_EVIDENCE:
+                first = conn.execute("select id from chunks where section_id = ? order by ord limit 1", (section_id,)).fetchone()
+                found = _passages(conn, [first[0]], {first[0]: 0.0}, 1) if first else []
+                if found:
+                    passages.append(found[0])
+                    by_section[section_id] = len(passages)
+                    added += 1
+            if section_id not in by_section:
+                continue
+            detail = f" ({f['detail']})" if f["detail"] else ""
+            line = f"- {c['name']} {FACT_WORDS[f['predicate']]} {f['object']}{detail} [{by_section[section_id]}]"
+            if line not in lines:
+                lines.append(line)
+            if len(lines) >= MAP_LINES:
+                return passages, lines
+    return passages, lines
+
+
 def sources_text(passages: list[dict]) -> str:
     def label(p):
         if p.get("source_kind") == "note":
@@ -166,14 +208,19 @@ async def ask(question: str, history: Optional[list[dict]] = None, conn=None) ->
     except QwenUnavailable:
         standalone, searches = question, []
     passages = gather(standalone, searches, conn=conn, limit=MAX_SOURCES_MULTIPART if searches else MAX_SOURCES)
+    kconn = conn or store.connect(_db_path())
+    cards = [c for c in (knowledge.card(kconn, i) for i in knowledge.find_entities(kconn, standalone)) if c]
+    passages, map_lines = add_evidence(kconn, passages, cards)
     yield {"type": "sources", "question": standalone, "rewritten": standalone != question,
-           "searches": searches, "passages": passages}
+           "searches": searches, "passages": passages, "cards": [trim(c) for c in cards]}
     if not passages:
         yield {"type": "done", "answer": "The handouts don't cover this: nothing matched the question.",
                "cited_share": 1.0, "fallback": False}
         return
     messages = [{"role": "system", "content": system_prompt()},
-                {"role": "user", "content": f"Sources:\n\n{sources_text(passages)}\n\nQuestion: {standalone}"}]
+                {"role": "user", "content": f"Sources:\n\n{sources_text(passages)}\n\n"
+                 + (f"Knowledge map:\n" + "\n".join(map_lines) + "\n\n" if map_lines else "")
+                 + f"Question: {standalone}"}]
     parts, said_thinking = [], False
     try:
         async for kind, chunk in stream(messages, "low", 3000):
@@ -191,13 +238,31 @@ async def ask(question: str, history: Optional[list[dict]] = None, conn=None) ->
     yield {"type": "done", "answer": answer, "cited_share": round(share, 2), "fallback": share < MIN_CITED_SHARE}
 
 
+def trim(card: dict, facts: int = 30) -> dict:
+    """A card small enough to send with every answer; the page fetches the rest on demand."""
+    seen, kept = set(), []
+    for f in sorted(card["facts"], key=lambda f: FACT_ORDER.index(f["predicate"])):
+        key = (f["predicate"], f["object"].lower(), f["detail"].lower())
+        if key not in seen:
+            seen.add(key)
+            kept.append(f)
+    return {**card, "facts": kept[:facts], "incoming": card["incoming"][:15]}
+
+
+def _db_path():
+    from handouts.ingest import db_path
+
+    return db_path()
+
+
 async def ask_once(question: str, history: Optional[list[dict]] = None, conn=None) -> dict:
     """The whole ask flow as one result, for the non-streaming endpoints and the eval."""
-    result = {"question": question, "standalone": question, "searches": [], "passages": [],
+    result = {"question": question, "standalone": question, "searches": [], "passages": [], "cards": [],
               "answer": None, "answer_error": None, "fallback": False, "cited_share": None}
     async for event in ask(question, history, conn=conn):
         if event["type"] == "sources":
-            result.update(standalone=event["question"], searches=event["searches"], passages=event["passages"])
+            result.update(standalone=event["question"], searches=event["searches"], passages=event["passages"],
+                          cards=event.get("cards", []))
         elif event["type"] == "done":
             result.update(answer=event["answer"], fallback=event["fallback"], cited_share=event["cited_share"])
         elif event["type"] == "error":
