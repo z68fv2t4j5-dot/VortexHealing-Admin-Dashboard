@@ -3,6 +3,7 @@
 The database lives in kb_dir() (outside the repository) and can always be rebuilt
 from the source folder, so there are no migrations: a schema change means a rebuild.
 """
+import hashlib
 import sqlite3
 from datetime import datetime
 from pathlib import Path
@@ -17,7 +18,7 @@ create table if not exists documents(
     status text not null, superseded_by text, source_kind text not null default 'handout', indexed_at text);
 create table if not exists sections(
     id integer primary key, document_id integer not null references documents(id) on delete cascade,
-    ord integer, heading_path text);
+    ord integer, heading_path text, text text, text_sha text);
 create table if not exists chunks(
     id integer primary key, section_id integer not null references sections(id) on delete cascade,
     document_id integer not null references documents(id) on delete cascade,
@@ -26,7 +27,21 @@ create virtual table if not exists chunks_fts using fts5(text, heading, title, t
 create table if not exists glossary_auto(abbr text, expansion text, document_id integer references documents(id) on delete cascade);
 create table if not exists eval_runs(id integer primary key, ran_at text, hits integer, total integer);
 create table if not exists meta(key text primary key, value text);
+-- Knowledge map (story 3). Qwen's reading of a section is cached by the section's text hash, so a
+-- rebuilt index re-uses it; entities and facts are derived from the cache and can be rebuilt in seconds.
+create table if not exists extraction_cache(text_sha text not null, model text not null, result text not null,
+    done_at text, primary key (text_sha, model));
+create table if not exists entities(id integer primary key, name text not null, norm text unique not null,
+    type text, aliases text);
+create table if not exists entity_definitions(entity_id integer references entities(id) on delete cascade,
+    definition text, section_id integer references sections(id) on delete cascade);
+create table if not exists facts(id integer primary key, subject_id integer references entities(id) on delete cascade,
+    predicate text, object_id integer references entities(id) on delete cascade, object_text text, detail text,
+    level text, section_id integer references sections(id) on delete cascade);
 """
+
+# Columns added after the first release; connect() adds them to an older kb.sqlite.
+LATER_COLUMNS = {"sections": [("text", "text"), ("text_sha", "text")]}
 
 
 def connect(path: Path) -> sqlite3.Connection:
@@ -37,6 +52,11 @@ def connect(path: Path) -> sqlite3.Connection:
     # WAL lets the page search while a background scan writes.
     conn.execute("pragma journal_mode = wal")
     conn.executescript(SCHEMA)
+    for table, columns in LATER_COLUMNS.items():
+        have = {r["name"] for r in conn.execute(f"pragma table_info({table})")}
+        for name, kind in columns:
+            if name not in have:
+                conn.execute(f"alter table {table} add column {name} {kind}")
     return conn
 
 
@@ -57,18 +77,18 @@ def delete_document(conn, path: str) -> None:
 
 
 def replace_document(conn, *, path, family, version, title, doc_date, sha256, text_sha,
-                     sections: list[tuple[tuple[str, ...], list[str]]], source_kind="handout") -> int:
-    """Insert a document with its sections and chunks, replacing any earlier copy of that path."""
+                     sections: list[tuple[tuple[str, ...], str, list[str]]], source_kind="handout") -> int:
+    """Insert a document with its sections (heading path, body, chunks), replacing any earlier copy of that path."""
     delete_document(conn, path)
     cur = conn.execute(
         "insert into documents(path, family, version, title, doc_date, sha256, text_sha, status, source_kind, indexed_at)"
         " values (?,?,?,?,?,?,?, 'KEEP', ?, ?)",
         (path, family, version, title, doc_date, sha256, text_sha, source_kind, _now()))
     doc_id = cur.lastrowid
-    for s_ord, (heading_path, chunks) in enumerate(sections):
+    for s_ord, (heading_path, body, chunks) in enumerate(sections):
         heading = " > ".join(heading_path)
-        sec_id = conn.execute("insert into sections(document_id, ord, heading_path) values (?,?,?)",
-                              (doc_id, s_ord, heading)).lastrowid
+        sec_id = conn.execute("insert into sections(document_id, ord, heading_path, text, text_sha) values (?,?,?,?,?)",
+                              (doc_id, s_ord, heading, body, hashlib.sha256(body.encode()).hexdigest())).lastrowid
         for c_ord, text in enumerate(chunks):
             chunk_id = conn.execute("insert into chunks(section_id, document_id, ord, text) values (?,?,?,?)",
                                     (sec_id, doc_id, c_ord, text)).lastrowid

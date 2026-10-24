@@ -1,13 +1,14 @@
 import json
 import threading
+from typing import Optional
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.core.config import settings
-from handouts import ingest, source_dir, store
-from handouts.answer import ask, ask_once
+from handouts import ingest, knowledge, source_dir, store
+from handouts.answer import ask, ask_once, trim
 from handouts.retrieve import search
 
 router = APIRouter()
@@ -32,13 +33,21 @@ def wants_answer(q: str, mode: str) -> bool:
     return q.strip().endswith("?") or (bool(words) and words[0] in QUESTION_WORDS) or len(words) >= 6
 
 
+def cards_for(text: str) -> list[dict]:
+    conn = store.connect(ingest.db_path())
+    try:
+        return [trim(c) for c in (knowledge.card(conn, i) for i in knowledge.find_entities(conn, text)) if c]
+    finally:
+        conn.close()
+
+
 @router.post("/handouts/query")
 async def query_handouts(query: HandoutsQuery):
     if not wants_answer(query.q, query.mode):
-        return {"query": query.q, "mode": "search", "passages": search(query.q, limit=10), "cards": [],
+        return {"query": query.q, "mode": "search", "passages": search(query.q, limit=10), "cards": cards_for(query.q),
                 "answer": None, "answer_error": None}
     result = await ask_once(query.q, query.history)
-    return {"query": query.q, "mode": "ask", "cards": [], **result}
+    return {"query": query.q, "mode": "ask", **result}
 
 
 @router.post("/handouts/query/stream")
@@ -50,7 +59,7 @@ async def query_handouts_stream(query: HandoutsQuery):
                 yield json.dumps(event) + "\n"
         else:
             yield json.dumps({"type": "sources", "question": query.q, "rewritten": False, "searches": [],
-                              "passages": search(query.q, limit=10)}) + "\n"
+                              "passages": search(query.q, limit=10), "cards": cards_for(query.q)}) + "\n"
             yield json.dumps({"type": "done", "answer": None}) + "\n"
     return StreamingResponse(events(), media_type="application/x-ndjson")
 
@@ -73,10 +82,47 @@ async def handouts_status():
         return {"configured": False, "scanning": False}
     conn = store.connect(ingest.db_path())
     try:
+        one = lambda sql: conn.execute(sql).fetchone()[0]
         return {"configured": True, "scanning": ingest.is_running(), "last_scan": store.get_meta(conn, "last_scan"),
-                **store.counts(conn)}
+                **store.counts(conn),
+                "knowledge": {"running": knowledge.is_running(conn), "entities": one("select count(*) from entities"),
+                              "facts": one("select count(*) from facts"), "sections_unread": len(knowledge.pending(conn))}}
     finally:
         conn.close()
+
+
+@router.post("/handouts/knowledge/run")
+async def run_knowledge():
+    conn = store.connect(ingest.db_path())
+    try:
+        if knowledge.is_running(conn):
+            return {"started": False, "reason": "the knowledge map is already being built"}
+    finally:
+        conn.close()
+    threading.Thread(target=knowledge.run_quietly, daemon=True).start()
+    return {"started": True}
+
+
+@router.get("/handouts/entities")
+async def list_entities(type: Optional[str] = None, q: str = ""):
+    conn = store.connect(ingest.db_path())
+    try:
+        return {"entities": knowledge.browse(conn, type, q),
+                "types": {r[0]: r[1] for r in conn.execute("select type, count(*) from entities group by type")}}
+    finally:
+        conn.close()
+
+
+@router.get("/handouts/entity/{entity_id}")
+async def entity_card(entity_id: int):
+    conn = store.connect(ingest.db_path())
+    try:
+        result = knowledge.card(conn, entity_id)
+    finally:
+        conn.close()
+    if result is None:
+        raise HTTPException(404, "No such entry in the knowledge map")
+    return result
 
 
 @router.post("/handouts/rescan")

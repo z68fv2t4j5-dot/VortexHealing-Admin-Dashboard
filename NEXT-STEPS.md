@@ -4,7 +4,7 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 
 ## What is true now (measured 2026-10-23)
 
-- Backend suite: 105 tests (email campaign API, class rules, reminders, handouts), run by `cd backend && python -m pytest`.
+- Backend suite: 125 tests (email campaign API, class rules, reminders, handouts), run by `cd backend && python -m pytest`.
 - Handouts knowledge base, story 1 of `docs/plans/PLAN-handouts-knowledge-base-2610212112.md` (ADR-0008): `backend/handouts/` keeps one current file per handout (74 indexed, 16 older versions retired, 1 identical duplicate skipped), splits them into 1,691 sections and 2,358 passages, and searches by keywords plus nomic embeddings. Index, glossary, notes and eval questions live in `HANDOUTS_KB_DIR` (`~/Documents/Handouts-KB`), outside the repository. Daniel's 21 eval questions: 21/21 find an expected handout in the top 5.
 - Handouts page: one box with Auto / Search / Ask; Rescan picks up new or revised handouts. A full index build takes about 30 seconds; the startup scan skips unchanged files.
 - Handouts story 2 (answers): follow-ups are rewritten and multi-part questions split (Qwen, thinking off), Qwen answers with low thinking and `[n]` citations, under-cited answers are withheld, and the page streams: passages in about 1 s, a simple answer done in about 15-25 s, a multi-part one in about 45 s. `python -m handouts eval --answers` writes a marking sheet to `HANDOUTS_KB_DIR/eval/`.
@@ -17,13 +17,15 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 1. `python scripts/harness_lint.py`
 2. `git status --short && git log --oneline -3`
 3. `cd backend && python -m pytest -q`
-4. `cd backend && python -m handouts status` shows the counts above; `python -m handouts eval` prints the hit total.
+4. `cd backend && python -m handouts status` shows the counts above; `python -m handouts eval` prints the hit total; `curl -s localhost:8001/api/handouts/status` shows the knowledge map's entries and facts.
 5. `curl -s localhost:8001/api/handouts/status` (backend running) returns `"configured": true`.
 
 ## Open threads
 
-- Daniel is marking the answer sheet from `python -m handouts eval --answers`; turn his "wrong" marks into fixes (retrieval, prompt, or teacher notes in story 4). Question 14 (genetic modification as one step) is open: the answer cites the MI protocol, Daniel said Jewel.
-- Handouts story 3 (knowledge map, overnight extraction with Qwen) and story 4 (teacher notes). Prompts for the local agent live in `~/Documents/Handouts-KB/QWEN-PROMPTS.md`; Qwen could not finish story 1, so plan on Claude building or closely supervising.
+- Handouts story 3 (knowledge map): 6,331 entries and 13,551 facts built by Qwen from 1,370 sections (about 3.5 hours, 4 at a time; cached, so re-indexing does not repeat it). Cards on the page, a Browse tab, and answers that use the map; `python -m handouts extract-knowledge` reads only new or changed sections, `apply-knowledge` rebuilds from the cache.
+- Daniel is checking `~/Documents/Handouts-KB/handout_classes.yaml` (which class each handout belongs to; Sensing Review is set to Sensing I).
+- Daniel is marking the answer sheets from `python -m handouts eval --answers` (latest `answers-20261024-2250.md`); turn his "wrong" marks into fixes (retrieval, prompt, or teacher notes in story 4). Question 14 (genetic modification as one step) is open: the answer cites the MI protocol, Daniel said Jewel.
+- Handouts story 4 (teacher notes): the fix for "external karma" and for Omega 2-step vs Jewel 1-step genetic modification, which the map does not state. Prompts for the local agent live in `~/Documents/Handouts-KB/QWEN-PROMPTS.md`; Qwen could not finish story 1, so plan on Claude building or closely supervising.
 - The Tasks page's AI call (`backend/app/api/ai_tasks.py`) names its model `"qwen"`; use `settings.QWEN_MODEL` or LM Studio may load a second copy.
 - Classes page shows wrong prerequisites: `backend/seed_classes.py` predates the flowchart; regenerate its `prerequisites` from `class_rules.py` (back up the database before reseeding).
 - Email delivery: approving a reminder or campaign only records it. Decide the sending account; the approval step stays.
@@ -43,4 +45,4 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 
 ## Kickoff text (paste into the next session)
 
-> Read NEXT-STEPS.md in full, then AGENTS.md, then docs/memory/MEMORY.md, then docs/ARCHITECTURE.md. Run harness-open. Then: ask Daniel for his marks on the latest answer sheet in `~/Documents/Handouts-KB/eval/`, and whether to continue with handouts story 3 (knowledge map) or plan real email delivery.
+> Read NEXT-STEPS.md in full, then AGENTS.md, then docs/memory/MEMORY.md, then docs/ARCHITECTURE.md. Run harness-open. Then: ask Daniel for his marks on the latest answer sheet in `~/Documents/Handouts-KB/eval/`, and whether to continue with handouts story 4 (teacher notes) or plan real email delivery.

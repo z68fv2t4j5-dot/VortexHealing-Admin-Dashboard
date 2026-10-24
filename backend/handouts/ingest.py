@@ -95,7 +95,7 @@ def _run(root: Path, entries, full: bool, out) -> dict:
         doc_id = store.replace_document(
             conn, path=e.path, family=e.family, version=version, title=title or Path(e.path).stem,
             doc_date=doc_date, sha256=sha, text_sha=text_sha,
-            sections=[(heading, chunk(body)) for heading, body in sections])
+            sections=[(heading, body, chunk(body)) for heading, body in sections])
         conn.executemany("insert into glossary_auto(abbr, expansion, document_id) values (?,?,?)",
                          [(a, x, doc_id) for a, x in harvest_abbreviations(text)])
         changed += 1
