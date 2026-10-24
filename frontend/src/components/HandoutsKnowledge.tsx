@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery } from 'react-query';
 import axios from 'axios';
-import { ExternalLink } from 'lucide-react';
+import { ExternalLink, StickyNote } from 'lucide-react';
+import type { Note } from './HandoutsNotes';
 
 export interface Source {
   section_id: number;
@@ -37,6 +38,7 @@ export interface EntityCardData {
   definitions: { text: string; source: Source }[];
   facts: Fact[];
   incoming: IncomingFact[];
+  notes?: Note[];
 }
 
 const box = { background: 'white', padding: '1.25rem 1.5rem', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' };
@@ -79,7 +81,9 @@ function EntityLink({ id, name, onOpen }: { id: number | null; name: string; onO
 }
 
 // One entry of the knowledge map: what it is, where it is introduced, and every fact with its handout.
-export function EntityCard({ data, onOpen }: { data: EntityCardData; onOpen: (id: number) => void }) {
+export function EntityCard({ data, onOpen, onAddNote }: {
+  data: EntityCardData; onOpen: (id: number) => void; onAddNote?: (card: EntityCardData) => void;
+}) {
   const [showAll, setShowAll] = useState(false);
   const groups: Record<string, Fact[]> = {};
   data.facts.filter(f => f.predicate !== 'introduced_in').forEach(f => { (groups[f.predicate] ||= []).push(f); });
@@ -99,6 +103,12 @@ export function EntityCard({ data, onOpen }: { data: EntityCardData; onOpen: (id
           <strong>Introduced in:</strong> {data.introduced_in.join(', ')}
         </p>
       )}
+      {(data.notes || []).map(n => (
+        <div key={n.file} style={{ marginTop: '0.75rem', padding: '0.6rem 0.8rem', background: '#f1f8f4', borderLeft: '3px solid #2e8b57', borderRadius: '4px' }}>
+          <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#2e8b57' }}>Teacher note{n.date ? `, ${n.date}` : ''}: {n.topic}</div>
+          <div style={{ color: '#333', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{n.body}</div>
+        </div>
+      ))}
       {data.definitions[0] && (
         <p style={{ margin: '0.5rem 0 0', color: '#555', lineHeight: 1.5 }}>
           {data.definitions[0].text} <SourceLink source={data.definitions[0].source} />
@@ -128,21 +138,31 @@ export function EntityCard({ data, onOpen }: { data: EntityCardData; onOpen: (id
           </div>
         </div>
       ))}
-      {(data.facts.length > 8 || data.incoming.length > 8) && (
-        <button onClick={() => setShowAll(!showAll)}
-          style={{ marginTop: '0.75rem', background: 'none', border: 'none', color: '#667eea', cursor: 'pointer', padding: 0 }}>
-          {showAll ? 'Show less' : 'Show everything'}
-        </button>
-      )}
+      <div style={{ display: 'flex', gap: '1.25rem', marginTop: '0.75rem' }}>
+        {(data.facts.length > 8 || data.incoming.length > 8) && (
+          <button onClick={() => setShowAll(!showAll)}
+            style={{ background: 'none', border: 'none', color: '#667eea', cursor: 'pointer', padding: 0 }}>
+            {showAll ? 'Show less' : 'Show everything'}
+          </button>
+        )}
+        {onAddNote && (
+          <button onClick={() => onAddNote(data)}
+            style={{ background: 'none', border: 'none', color: '#2e8b57', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+            <StickyNote size={14} /> Add a note
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
 // Loads a card by id, so links inside cards and the Browse list can open any entry.
-export function EntityCardById({ id, onOpen }: { id: number; onOpen: (id: number) => void }) {
+export function EntityCardById({ id, onOpen, onAddNote }: {
+  id: number; onOpen: (id: number) => void; onAddNote?: (card: EntityCardData) => void;
+}) {
   const { data, isLoading } = useQuery(['handouts-entity', id], () => axios.get(`/api/handouts/entity/${id}`).then(r => r.data));
   if (isLoading || !data) return <div style={{ ...box, color: '#999' }}>Loading…</div>;
-  return <EntityCard data={data} onOpen={onOpen} />;
+  return <EntityCard data={data} onOpen={onOpen} onAddNote={onAddNote} />;
 }
 
 const TYPES = [
@@ -152,7 +172,7 @@ const TYPES = [
 ];
 
 // Every entry in the knowledge map, filterable by kind and name; selecting one shows its card.
-export function KnowledgeBrowse() {
+export function KnowledgeBrowse({ onAddNote }: { onAddNote?: (card: EntityCardData) => void }) {
   const [kind, setKind] = useState('');
   const [filter, setFilter] = useState('');
   const [open, setOpen] = useState<number | null>(null);
@@ -173,7 +193,7 @@ export function KnowledgeBrowse() {
         <input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Filter by name…"
           style={{ marginLeft: 'auto', padding: '0.4rem 0.75rem', border: '1px solid #ddd', borderRadius: '6px', minWidth: '12rem' }} />
       </div>
-      {open !== null && <EntityCardById id={open} onOpen={setOpen} />}
+      {open !== null && <EntityCardById id={open} onOpen={setOpen} onAddNote={onAddNote} />}
       <div style={{ ...box, display: 'flex', flexWrap: 'wrap', gap: '0.4rem 1rem' }}>
         {(data?.entities || []).map((e: { id: number; name: string; n: number }) => (
           <button key={e.id} onClick={() => setOpen(e.id)}

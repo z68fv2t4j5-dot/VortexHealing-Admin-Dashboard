@@ -15,6 +15,11 @@ from handouts.embed import embed
 CANDIDATES = 40
 RRF_K = 60
 PER_DOCUMENT = 3
+# A matching teacher note gets the weight of one extra first place, so it outranks a handout passage
+# that matches equally well. "Matching" means a keyword hit or the top 10 by meaning, so a note does not
+# push into every loosely related question.
+NOTE_BOOST = 1.0 / (RRF_K + 1)
+NOTE_SEMANTIC_TOP = 10
 STOPWORDS = {"a", "an", "and", "are", "as", "at", "be", "can", "do", "does", "for", "from", "get", "how",
              "i", "in", "is", "it", "of", "on", "or", "should", "that", "the", "this", "to", "used", "what",
              "whats", "when", "where", "which", "who", "why", "with", "you", "your"}
@@ -33,6 +38,7 @@ def search(query: str, limit: int = 10, conn: Optional[sqlite3.Connection] = Non
         if (semantic := _semantic(conn, expanded)) is not None:
             ranked.append(semantic)
         fused = fuse(ranked)
+        boost_notes(conn, fused, ranked)
         return _passages(conn, sorted(fused, key=fused.get, reverse=True), fused, limit)
     finally:
         if own:
@@ -46,6 +52,16 @@ def fuse(rankings: list[list[int]]) -> dict[int, float]:
         for rank, item in enumerate(ranking):
             fused[item] = fused.get(item, 0.0) + 1.0 / (RRF_K + rank + 1)
     return fused
+
+
+def boost_notes(conn, fused: dict[int, float], ranked: list[list[int]]) -> None:
+    matched = set(ranked[0]) | (set(ranked[1][:NOTE_SEMANTIC_TOP]) if len(ranked) > 1 else set())
+    if not matched:
+        return
+    marks = ",".join("?" * len(matched))
+    for (cid,) in conn.execute(f"select c.id from chunks c join documents d on d.id = c.document_id"
+                               f" where d.source_kind = 'note' and c.id in ({marks})", list(matched)):
+        fused[cid] = fused.get(cid, 0.0) + NOTE_BOOST
 
 
 def glossary(conn) -> dict[str, list[str]]:

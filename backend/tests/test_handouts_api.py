@@ -63,8 +63,6 @@ def test_ask_reports_qwen_down_but_still_returns_passages(client, lm):  # noqa: 
     data = client.post("/api/handouts/query", json={"q": "what do merlin structures do?"}).json()
     assert data["answer"] is None and "LM Studio" in data["answer_error"]
     assert data["passages"]
-    old = client.post("/api/handouts/ask", json={"question": "what do merlin structures do?"}).json()
-    assert "LM Studio" in old["answer"]
 
 
 def test_a_question_nothing_matches_says_so(client, monkeypatch):
@@ -81,8 +79,9 @@ def test_follow_up_uses_the_previous_question(client):
     assert data["passages"]
 
 
-def test_old_search_endpoint_still_works(client):
-    assert client.get("/api/handouts/search", params={"q": "merlin"}).json()["results"]
+def test_the_step_1_endpoints_are_gone(client):
+    assert client.get("/api/handouts/search", params={"q": "merlin"}).status_code == 404
+    assert client.post("/api/handouts/ask", json={"question": "merlin?"}).status_code == 404
 
 
 def test_status_counts_and_unconfigured(client, monkeypatch):
@@ -102,7 +101,7 @@ def test_rescan_starts_once(client, monkeypatch):
 
 
 def test_file_serves_the_pdf_of_the_same_version(client):
-    doc_id = client.get("/api/handouts/search", params={"q": "merlin"}).json()["results"][0]["document_id"]
+    doc_id = client.post("/api/handouts/query", json={"q": "merlin", "mode": "search"}).json()["passages"][0]["document_id"]
     r = client.get(f"/api/handouts/file/{doc_id}")
     assert r.status_code == 200 and r.content.startswith(b"%PDF")
     assert client.get("/api/handouts/file/99999").status_code == 404

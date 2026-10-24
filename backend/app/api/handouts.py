@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.core.config import settings
-from handouts import ingest, knowledge, source_dir, store
+from handouts import ingest, knowledge, notes, source_dir, store
 from handouts.answer import ask, ask_once, trim
 from handouts.retrieve import search
 
@@ -22,8 +22,11 @@ class HandoutsQuery(BaseModel):
     history: list[dict] = []
 
 
-class AskQuery(BaseModel):
-    question: str
+class NoteIn(BaseModel):
+    topic: str
+    body: str
+    entities: list[str] = []
+    corrects: Optional[str] = None
 
 
 def wants_answer(q: str, mode: str) -> bool:
@@ -62,18 +65,6 @@ async def query_handouts_stream(query: HandoutsQuery):
                               "passages": search(query.q, limit=10), "cards": cards_for(query.q)}) + "\n"
             yield json.dumps({"type": "done", "answer": None}) + "\n"
     return StreamingResponse(events(), media_type="application/x-ndjson")
-
-
-@router.get("/handouts/search")
-async def search_handouts(q: str):
-    return {"query": q, "results": search(q, limit=10)}
-
-
-@router.post("/handouts/ask")
-async def ask_handouts(query: AskQuery):
-    result = await ask_once(query.question)
-    return {"question": query.question, "answer": result["answer"] or result["answer_error"],
-            "passages": result["passages"]}
 
 
 @router.get("/handouts/status")
@@ -142,6 +133,14 @@ async def handout_file(document_id: int):
         conn.close()
     if row is None:
         raise HTTPException(404, "No such handout")
+    if row["path"].startswith("notes/"):
+        try:
+            note = notes.note_path(row["path"].removeprefix("notes/"))
+        except ValueError:
+            raise HTTPException(404, "Note not found")
+        if not note.exists():
+            raise HTTPException(404, "Note not found")
+        return FileResponse(note, media_type="text/markdown; charset=utf-8")
     root = source_dir().resolve()
     path = (root / row["path"]).resolve()
     if root not in path.parents or not path.exists():
@@ -149,3 +148,43 @@ async def handout_file(document_id: int):
     # The PDF of the same version reads better in a browser than the .doc it was indexed from.
     pdf = path.with_suffix(".pdf")
     return FileResponse(pdf if pdf.exists() else path)
+
+
+@router.get("/handouts/notes")
+async def list_notes():
+    return {"notes": notes.list_notes()}
+
+
+def _saved(name: str) -> dict:
+    ingest.refresh_notes()
+    return next(n for n in notes.list_notes() if n["file"] == name)
+
+
+@router.post("/handouts/notes")
+async def add_note(note: NoteIn):
+    try:
+        name = notes.save(note.topic, note.body, note.entities, note.corrects)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return _saved(name)
+
+
+@router.put("/handouts/notes/{name}")
+async def edit_note(name: str, note: NoteIn):
+    try:
+        notes.save(note.topic, note.body, note.entities, note.corrects, name=name)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except FileNotFoundError:
+        raise HTTPException(404, "No such note")
+    return _saved(name)
+
+
+@router.delete("/handouts/notes/{name}")
+async def delete_note(name: str):
+    try:
+        notes.delete(name)
+    except (ValueError, FileNotFoundError):
+        raise HTTPException(404, "No such note")
+    ingest.refresh_notes()
+    return {"deleted": name}

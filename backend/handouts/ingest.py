@@ -14,7 +14,7 @@ from typing import Callable
 
 import yaml
 
-from handouts import catalog, kb_dir, source_dir, store
+from handouts import catalog, kb_dir, notes, source_dir, store
 from handouts.embed import embed
 from handouts.extract import extract_text
 from handouts.sections import chunk, split
@@ -108,15 +108,30 @@ def _run(root: Path, entries, full: bool, out) -> dict:
             out(f"  removed from the folder: {row['path']}")
     conn.commit()
 
+    notes_changed = notes.index(conn, out)
     embedded = _fill_embeddings(conn, out)
     store.set_meta(conn, "last_scan", store._now())
     store.set_meta(conn, "index_version", store._now())
     conn.commit()
-    summary = {"indexed": changed, "unchanged": unchanged, "identical_text": duplicates, "embedded": embedded,
+    summary = {"indexed": changed, "unchanged": unchanged, "identical_text": duplicates, "notes_changed": notes_changed,
+               "embedded": embedded,
                **store.counts(conn)}
     conn.close()
     out(f"Scan done: {summary}")
     return summary
+
+
+def refresh_notes(out: Callable[[str], None] = logger.info) -> int:
+    """Re-indexes the notes folder only: a saved note is searchable within a second or two."""
+    conn = store.connect(db_path())
+    try:
+        changed = notes.index(conn, out)
+        _fill_embeddings(conn, out)
+        store.set_meta(conn, "index_version", store._now())
+        conn.commit()
+        return changed
+    finally:
+        conn.close()
 
 
 def _fill_embeddings(conn, out) -> int:

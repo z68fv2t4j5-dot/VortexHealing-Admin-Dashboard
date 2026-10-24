@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from 'react-query';
 import axios from 'axios';
-import { Search, MessageCircle, BookOpen, RefreshCw, Sparkles, ExternalLink, Layers } from 'lucide-react';
+import { Search, MessageCircle, BookOpen, RefreshCw, Sparkles, ExternalLink, Layers, StickyNote } from 'lucide-react';
 import { EntityCard, EntityCardById, EntityCardData, KnowledgeBrowse } from '../components/HandoutsKnowledge';
+import { NoteDraft, NoteEditor, NotesList } from '../components/HandoutsNotes';
 import '../styles/Pages.css';
 
 type Mode = 'auto' | 'search' | 'ask';
@@ -16,6 +17,7 @@ interface Passage {
   version: string;
   path: string;
   doc_date: string | null;
+  source_kind: 'handout' | 'note';
 }
 
 interface QueryResult {
@@ -95,7 +97,9 @@ export default function Handouts() {
   const [phase, setPhase] = useState<Phase>(null);
   const loading = phase !== null;
   const [error, setError] = useState('');
-  const [view, setView] = useState<'ask' | 'browse'>('ask');
+  const [view, setView] = useState<'ask' | 'browse' | 'notes'>('ask');
+  const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null);
+  const [noteSaved, setNoteSaved] = useState('');
   const [openCard, setOpenCard] = useState<number | null>(null);
 
   const { data: status } = useQuery(
@@ -155,6 +159,11 @@ export default function Handouts() {
     }
     setPhase(null);
   };
+
+  const noteForCard = (c: EntityCardData) => setNoteDraft({ topic: c.name, body: '', entities: [c.name], corrects: null });
+  const noteForAnswer = () => result && setNoteDraft({ topic: result.searchedAs, body: '',
+    entities: result.cards.map(c => c.name), corrects: null });
+  const citedHandouts = result ? Array.from(new Set(result.passages.filter(p => p.source_kind !== 'note').map(p => p.title))) : [];
 
   const buildMap = async () => {
     await axios.post('/api/handouts/knowledge/run').catch(() => null);
@@ -223,17 +232,26 @@ export default function Handouts() {
           </button>
         ))}
         <button
+          onClick={() => setView('notes')}
+          title="Your teacher notes"
+          style={{ padding: '0.6rem 1.25rem', background: view === 'notes' ? '#2e8b57' : '#f0f0f0',
+            color: view === 'notes' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer',
+            fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}
+        >
+          <StickyNote size={18} /> Notes
+        </button>
+        <button
           onClick={() => setView('browse')}
           title="Every tool, class and kind of conditioning in the knowledge map"
           style={{ padding: '0.6rem 1.25rem', background: view === 'browse' ? '#667eea' : '#f0f0f0',
             color: view === 'browse' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer',
-            fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}
+            fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
         >
           <Layers size={18} /> Browse
         </button>
       </div>
 
-      {view === 'browse' ? <KnowledgeBrowse /> : (<>
+      {view === 'notes' ? <NotesList /> : view === 'browse' ? <KnowledgeBrowse onAddNote={noteForCard} /> : (<>
 
       <div style={{ ...card, marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -281,11 +299,11 @@ export default function Handouts() {
       )}
 
       {openCard !== null && (
-        <div style={{ marginBottom: '1.5rem' }}><EntityCardById id={openCard} onOpen={setOpenCard} /></div>
+        <div style={{ marginBottom: '1.5rem' }}><EntityCardById id={openCard} onOpen={setOpenCard} onAddNote={noteForCard} /></div>
       )}
       {openCard === null && result && result.cards.length > 0 && (
         <div style={{ display: 'grid', gap: '1rem', marginBottom: '1.5rem' }}>
-          {result.cards.map(c => <EntityCard key={c.id} data={c} onOpen={setOpenCard} />)}
+          {result.cards.map(c => <EntityCard key={c.id} data={c} onOpen={setOpenCard} onAddNote={noteForCard} />)}
         </div>
       )}
 
@@ -299,26 +317,35 @@ export default function Handouts() {
               : result.answer
                 ? <div style={{ color: '#333', lineHeight: 1.6 }}>{renderAnswer(result.answer)}</div>
                 : <p style={{ color: '#999', margin: 0 }}>Reading the passages below…</p>}
+          {!loading && (result.answer || result.answerError) && (
+            <button onClick={noteForAnswer}
+              style={{ marginTop: '1rem', background: 'none', border: 'none', color: '#2e8b57', cursor: 'pointer', padding: 0,
+                display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              <StickyNote size={14} /> Add a note: correct or add to this answer
+            </button>
+          )}
         </div>
       )}
 
       {result && result.passages.length > 0 && (
         <div style={{ display: 'grid', gap: '1rem' }}>
           {result.passages.map((p, i) => (
-            <div id={`passage-${i + 1}`} key={p.chunk_id} style={{ ...card, borderLeft: '4px solid #667eea' }}>
+            <div id={`passage-${i + 1}`} key={p.chunk_id}
+              style={{ ...card, borderLeft: `4px solid ${p.source_kind === 'note' ? '#2e8b57' : '#667eea'}`,
+                background: p.source_kind === 'note' ? '#f6fbf8' : 'white' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'baseline' }}>
                 <h3 style={{ margin: '0 0 0.35rem 0', color: '#333', fontSize: '1.05rem' }}>
                   <span style={{ color: '#667eea' }}>[{i + 1}]</span> {p.title}
                 </h3>
-                <a href={`/api/handouts/file/${p.document_id}`} target="_blank" rel="noreferrer"
+                {p.source_kind !== 'note' && <a href={`/api/handouts/file/${p.document_id}`} target="_blank" rel="noreferrer"
                   style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem', color: '#667eea', whiteSpace: 'nowrap' }}>
                   Open handout <ExternalLink size={14} />
-                </a>
+                </a>}
               </div>
               <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', color: '#666' }}>
-                {p.heading_path || 'Opening section'}
+                {p.source_kind === 'note' ? `Your note${p.doc_date ? `, ${p.doc_date}` : ''}` : p.heading_path || 'Opening section'}
                 {p.version && ` • version ${p.version}`}
-                {p.doc_date && ` • ${p.doc_date}`}
+                {p.doc_date && p.source_kind !== 'note' && ` • ${p.doc_date}`}
               </p>
               <p style={{ margin: 0, color: '#555', lineHeight: 1.55 }}>{highlight(p.text, result.query)}</p>
             </div>
@@ -338,6 +365,23 @@ export default function Handouts() {
         </div>
       )}
       </>)}
+      {noteSaved && (
+        <div style={{ position: 'fixed', bottom: '1.5rem', right: '1.5rem', background: '#2e8b57', color: 'white',
+          padding: '0.75rem 1.25rem', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+          {noteSaved}
+        </div>
+      )}
+      {noteDraft && (
+        <NoteEditor draft={noteDraft} sources={citedHandouts} onClose={() => setNoteDraft(null)}
+          onSaved={note => {
+            setNoteDraft(null);
+            setNoteSaved(`Note saved: "${note.topic}". Answers use it from now on.`);
+            setTimeout(() => setNoteSaved(''), 4000);
+            queryClient.invalidateQueries('handouts-notes');
+            queryClient.invalidateQueries('handouts-status');
+            queryClient.invalidateQueries('handouts-entity');
+          }} />
+      )}
     </div>
   );
 }

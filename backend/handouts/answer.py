@@ -34,9 +34,12 @@ start that sentence with "Inference:". If the sources do not answer the question
 this" and name the closest sources. Never add knowledge from outside the sources. Write plain prose, with short
 headings when the answer has parts (what it is, where it comes from, which tools, which class).
 Be concise: about 250 words unless the question asks for a list, a protocol or a comparison.
+Use class and tool names exactly as the sources write them and never merge similar names: for example Jewel,
+Magical Jewel and Merlin's Jewel are three different things.
 Each source is labelled with its handout's title. A handout titled "<Class> Review" is the review for that class,
 so "in this class" inside it means that class.
-Teacher notes, when given, come from the teacher and override the handouts where they disagree.
+Sources labelled "Teacher note" come from the teacher: treat them as correct, let them override the handouts
+where they disagree, and cite them like any other source.
 A "Knowledge map" list may follow the sources: facts already taken from those sources, each ending with its
 source number. Use it to connect and compare classes (for example how something is done in one class and
 another), and cite the source numbers it gives."""
@@ -152,6 +155,16 @@ def add_evidence(conn, passages: list[dict], cards: list[dict]) -> tuple[list[di
             by_section.setdefault(sec[0], i)
     lines, added = [], 0
     for c in cards:
+        for n in c.get("notes", []):
+            first = conn.execute("select c.id from chunks c join documents d on d.id = c.document_id"
+                                 " where d.path = ? order by c.ord limit 1", (f"notes/{n['file']}",)).fetchone()
+            if first and not any(p["chunk_id"] == first[0] for p in passages):
+                found = _passages(conn, [first[0]], {first[0]: 0.0}, 1)
+                if found:
+                    passages.append(found[0])
+            number = next((i for i, p in enumerate(passages, 1) if first and p["chunk_id"] == first[0]), None)
+            if number:
+                lines.append(f"- Teacher note on {n['topic']} [{number}]")
         for f in sorted(c["facts"], key=lambda f: FACT_ORDER.index(f["predicate"])):
             section_id = f["source"]["section_id"]
             if section_id not in by_section and added < MAX_EVIDENCE:
@@ -175,7 +188,7 @@ def add_evidence(conn, passages: list[dict], cards: list[dict]) -> tuple[list[di
 def sources_text(passages: list[dict]) -> str:
     def label(p):
         if p.get("source_kind") == "note":
-            return f"Teacher note ({p.get('doc_date') or p['title']})"
+            return f"{p['title']} ({p['doc_date']})" if p.get("doc_date") else p["title"]
         version = f", version {p['version']}" if p.get("version") else ""
         return f"{p['title']}{version} — {p['heading_path'] or 'opening section'}"
     return "\n\n".join(f"[{i}] {label(p)}\n{p['text']}" for i, p in enumerate(passages, 1))
