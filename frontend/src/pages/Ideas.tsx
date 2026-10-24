@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from 'react-query';
 import axios from 'axios';
 import '../styles/Pages.css';
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = '/api';
 
 export default function Ideas() {
   const queryClient = useQueryClient();

@@ -34,7 +34,7 @@ python -c "from app.core.database import Base, engine; Base.metadata.create_all(
 python main.py
 ```
 
-Backend runs on: **http://localhost:8000**
+Backend runs on: **http://localhost:8001**
 
 ### 2. Frontend Setup
 
@@ -60,7 +60,7 @@ docker-compose up --build
 
 # Services will be available at:
 # - Frontend: http://localhost:3000
-# - Backend: http://localhost:8000
+# - Backend: http://localhost:8001
 # - PostgreSQL: localhost:5432
 ```
 
@@ -89,8 +89,8 @@ FRONTEND_URL=http://localhost:3000
 
 Once backend is running:
 
-- **Interactive API Docs (Swagger UI)**: http://localhost:8000/docs
-- **Alternative Docs (ReDoc)**: http://localhost:8000/redoc
+- **Interactive API Docs (Swagger UI)**: http://localhost:8001/docs
+- **Alternative Docs (ReDoc)**: http://localhost:8001/redoc
 
 ---
 
@@ -197,8 +197,8 @@ The dashboard uses Qwen for:
 
 ### Backend won't start
 ```bash
-# Check if port 8000 is in use
-lsof -i :8000
+# Check if port 8001 is in use
+lsof -i :8001
 
 # Kill process if needed
 kill -9 <PID>
@@ -213,7 +213,7 @@ psql -U vortex -d vortexhealing -c "SELECT 1"
 ```
 
 ### Frontend can't reach backend
-- Ensure backend is running on port 8000
+- Ensure backend is running on port 8001
 - Check if CORS is enabled in backend
 - Verify API_URL in frontend environment
 

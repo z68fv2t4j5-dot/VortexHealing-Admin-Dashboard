@@ -204,7 +204,7 @@ export default function Email() {
       resetComposer();
     } catch (error) {
       console.error('Error saving draft:', error);
-      alert('Error saving draft. Is the backend running on localhost:8000?');
+      alert('Error saving draft. Is the backend running?');
     } finally {
       setSaving(false);
     }
@@ -218,7 +218,7 @@ export default function Email() {
       setConfirmPreview(response.data);
     } catch (error) {
       console.error('Error loading preview:', error);
-      alert('Error loading recipients. Is the backend running on localhost:8000?');
+      alert('Error loading recipients. Is the backend running?');
       setPendingSend(null);
     }
   };
@@ -244,7 +244,7 @@ export default function Email() {
       if (pendingSend.campaignId === undefined) resetComposer();
     } catch (error) {
       console.error('Error sending campaign:', error);
-      alert('Error sending campaign. Is the backend running on localhost:8000?');
+      alert('Error sending campaign. Is the backend running?');
     } finally {
       setSending(false);
     }

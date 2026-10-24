@@ -4,7 +4,7 @@ import axios from 'axios';
 import { Search, Filter, X, Mail, Tag } from 'lucide-react';
 import '../styles/Pages.css';
 
-const API_URL = 'http://localhost:8000/api';
+const API_URL = '/api';
 
 export default function Students() {
   const [searchTerm, setSearchTerm] = useState('');

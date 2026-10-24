@@ -80,7 +80,7 @@ export default function RemindersDue() {
       setReviewing(null);
     } catch (error: any) {
       console.error('Error approving reminder:', error);
-      alert(error?.response?.data?.detail || 'Error approving reminder. Is the backend running on localhost:8000?');
+      alert(error?.response?.data?.detail || 'Error approving reminder. Is the backend running?');
     } finally {
       setApproving(false);
     }
