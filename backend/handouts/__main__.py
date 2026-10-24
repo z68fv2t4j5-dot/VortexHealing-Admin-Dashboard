@@ -1,16 +1,24 @@
-"""CLI: python -m handouts ingest [--dry-run] [--full] | status | eval"""
+"""CLI: python -m handouts ingest [--dry-run] [--full] | status | eval [--answers]"""
 import argparse
+import asyncio
 import json
+import time
+from datetime import datetime
 
 import yaml
 
 from handouts import kb_dir, store
+from handouts.answer import ask_once
 from handouts.ingest import db_path, run
 from handouts.retrieve import search
 
 
+def load_questions() -> list[dict]:
+    return yaml.safe_load((kb_dir() / "eval" / "questions.yaml").read_text()) or []
+
+
 def evaluate() -> None:
-    questions = yaml.safe_load((kb_dir() / "eval" / "questions.yaml").read_text()) or []
+    questions = load_questions()
     hits = 0
     for item in questions:
         query = " ".join([*item.get("history", []), item["q"]])
@@ -25,6 +33,37 @@ def evaluate() -> None:
     conn.commit()
 
 
+def evaluate_answers() -> None:
+    """Runs every question through Ask and writes a marking sheet for Daniel into the data folder."""
+    answers: dict[str, str] = {}
+    lines = [f"# Handouts answers to mark, {datetime.now():%Y-%m-%d %H:%M}", "",
+             "For each answer, tick one box and add a note if it is wrong or missing something.", ""]
+    for n, item in enumerate(load_questions(), 1):
+        history = [{"q": h, "answer": answers.get(h, "")} for h in item.get("history", [])]
+        start = time.time()
+        result = asyncio.run(ask_once(item["q"], history))
+        seconds = time.time() - start
+        answers[item["q"]] = result["answer"] or ""
+        print(f"{n:2}. {seconds:4.0f}s  {item['q']}")
+        sources = "; ".join(f"[{i}] {p['title']} — {p['heading_path'] or 'opening section'}"
+                            for i, p in enumerate(result["passages"], 1))
+        lines += [f"## {n}. {item['q']}", ""]
+        if result["standalone"] != item["q"]:
+            lines += [f"*Understood as:* {result['standalone']}", ""]
+        if result["searches"]:
+            lines += [f"*Searched for:* {' · '.join(result['searches'])}", ""]
+        if item.get("answer_should_say"):
+            lines += [f"*Should say:* {item['answer_should_say']}", ""]
+        body = result["answer_error"] or result["answer"] or "(no answer)"
+        if result["fallback"]:
+            body = "(hidden on the page: too few citations)\n\n" + body
+        lines += [f"*{seconds:.0f} seconds*", "", body, "", f"<sub>Sources: {sources}</sub>", "",
+                  "- [ ] Right  - [ ] Partly right  - [ ] Wrong", "", "Note:", "", "---", ""]
+    out = kb_dir() / "eval" / f"answers-{datetime.now():%Y%m%d-%H%M}.md"
+    out.write_text("\n".join(lines))
+    print(f"\nMarking sheet: {out}")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m handouts")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -32,7 +71,8 @@ def main() -> None:
     ingest.add_argument("--dry-run", action="store_true", help="print the catalogue only; write nothing")
     ingest.add_argument("--full", action="store_true", help="re-index every file, changed or not")
     sub.add_parser("status", help="print index counts")
-    sub.add_parser("eval", help="run the questions in eval/questions.yaml")
+    ev = sub.add_parser("eval", help="run the questions in eval/questions.yaml")
+    ev.add_argument("--answers", action="store_true", help="also ask Qwen and write a marking sheet")
     args = parser.parse_args()
 
     if args.command == "ingest":
@@ -41,7 +81,7 @@ def main() -> None:
         conn = store.connect(db_path())
         print(json.dumps({**store.counts(conn), "last_scan": store.get_meta(conn, "last_scan")}, indent=2))
     elif args.command == "eval":
-        evaluate()
+        evaluate_answers() if args.answers else evaluate()
 
 
 if __name__ == "__main__":

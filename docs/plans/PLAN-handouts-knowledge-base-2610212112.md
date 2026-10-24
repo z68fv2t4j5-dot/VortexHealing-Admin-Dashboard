@@ -1,5 +1,14 @@
 # Plan (feature): handouts knowledge base (v2 of Handouts)
-Status: story 1 done 2026-10-23 (stories 2-4 open). Set up in a Claude Code session with Daniel; planned for the local agent (Qwen), one story per session and per pull request, in the order below.
+Status: story 1 done 2026-10-23; story 2 done 2026-10-23 (stories 3-4 open).
+
+Departures in story 2, as built (Daniel asked for better answers without the extra wait):
+- Measured first: the backend named the model `qwen3.8-27b`, so LM Studio loaded a second copy (other format, 8,192 context); with the identifier `qwen/qwen3.8-27b` the same answer took 17 s instead of 64 s and was correct instead of hedged.
+- Helper calls (follow-up rewrite, multi-part split) run with thinking off, only when needed: rewrite only with history, split only for questions of 8+ words with "and", a comma or two question marks. The answer keeps low thinking: with thinking off it again answered "the handouts don't cover this" for LifeEssences and the genetic-modification question.
+- 8 sources (10 for multi-part) instead of 12, and a 250-word guide, after measuring 12 sources and unbounded answers at 65 s for a multi-part question; now about 45 s, with passages shown within about 1 s and the answer streamed.
+- The prompt names the abbreviations from Daniel's glossary (thinking-off had expanded LF as "Low Frequency") and explains that "<Class> Review" handouts mean that class by "this class".
+- The citation check counts paragraphs and bullets of 8+ words, not sentences: Qwen cites per paragraph.
+- Fixed during story 2 from Daniel's marks: tab-indented list items are never headings (they had split the MG ending options into fragments).
+- `eval --answers` writes a marking sheet to `HANDOUTS_KB_DIR/eval/`; answers are judged by Daniel, not automatically. Set up in a Claude Code session with Daniel; planned for the local agent (Qwen), one story per session and per pull request, in the order below.
 
 Departures in story 1, as built:
 - Built by Claude, not Qwen. In Continue, Qwen 3.8 27B ran out of reply tokens while deliberating, wrote files into the wrong workspace, and its `sections.py` crashed on import and ignored the heading rules. Daniel chose to have Claude finish story 1; Qwen remains the in-app answering model.

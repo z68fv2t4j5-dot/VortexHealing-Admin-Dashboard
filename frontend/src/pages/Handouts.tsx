@@ -19,11 +19,17 @@ interface Passage {
 
 interface QueryResult {
   query: string;
-  mode: 'search' | 'ask';
+  searchedAs: string;
+  rewritten: boolean;
+  searches: string[];
   passages: Passage[];
-  answer: string | null;
-  answer_error: string | null;
+  answer: string;
+  answerError: string;
+  fallback: boolean;
+  asked: boolean;
 }
+
+type Phase = 'searching' | 'thinking' | 'writing' | null;
 
 const card = { background: 'white', padding: '1.5rem', borderRadius: '8px', boxShadow: '0 2px 4px rgba(0,0,0,0.05)' };
 
@@ -33,23 +39,48 @@ const MODES: { id: Mode; label: string; icon: React.ReactNode }[] = [
   { id: 'ask', label: 'Ask (AI)', icon: <MessageCircle size={18} /> },
 ];
 
-// Bold the query words inside a passage, ignoring short and common words.
+const COMMON = new Set(['and', 'the', 'what', 'which', 'does', 'how', 'why', 'who', 'when', 'where', 'class', 'with',
+  'for', 'from', 'that', 'this', 'are', 'can', 'you', 'our', 'into', 'its', 'whats', 'should', 'used', 'get']);
+
+// Mark the query words inside a passage, as whole words, ignoring short and common ones.
 function highlight(text: string, query: string) {
-  const words = query.toLowerCase().match(/[a-z0-9’']{3,}/g) || [];
+  const words: string[] = (query.toLowerCase().match(/[a-z0-9’']{3,}/g) || []).filter(w => !COMMON.has(w));
   if (!words.length) return text;
-  const pattern = new RegExp(`(${words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
+  const pattern = new RegExp(`\\b(${words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`, 'gi');
   return text.split(pattern).map((part, i) =>
     words.includes(part.toLowerCase()) ? <mark key={i} style={{ background: '#e8eaff' }}>{part}</mark> : part
   );
 }
 
-// Turn [3] in an answer into a link that scrolls to passage 3.
-function withCitations(answer: string) {
-  return answer.split(/(\[\d+\])/g).map((part, i) => {
-    const m = part.match(/^\[(\d+)\]$/);
-    return m
-      ? <a key={i} href={`#passage-${m[1]}`} style={{ color: '#667eea', fontWeight: 600, textDecoration: 'none' }}>{part}</a>
-      : part;
+// Inline answer text: **bold**, and [3] as a link that scrolls to passage 3.
+function inline(text: string, key: string) {
+  return text.split(/(\*\*[^*]+\*\*|\[\d+\])/g).map((part, i) => {
+    const cite = part.match(/^\[(\d+)\]$/);
+    if (cite) {
+      return <a key={`${key}-${i}`} href={`#passage-${cite[1]}`} style={{ color: '#667eea', fontWeight: 600, textDecoration: 'none' }}>{part}</a>;
+    }
+    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) return <strong key={`${key}-${i}`}>{part.slice(2, -2)}</strong>;
+    return part;
+  });
+}
+
+// The small amount of Markdown Qwen writes: headings, bullet and numbered lines, paragraphs.
+function renderAnswer(answer: string) {
+  return answer.split('\n').map((line, i) => {
+    const key = String(i);
+    const heading = line.match(/^#{1,6}\s+(.*)/);
+    if (heading) return <h4 key={key} style={{ margin: '1rem 0 0.25rem', color: '#333' }}>{inline(heading[1], key)}</h4>;
+    const bullet = line.match(/^\s*([-*•]|\d+[.)])\s+(.*)/);
+    if (bullet) {
+      return (
+        <div key={key} style={{ display: 'flex', gap: '0.5rem', margin: '0.2rem 0 0.2rem 0.5rem' }}>
+          <span style={{ color: '#667eea' }}>{/\d/.test(bullet[1]) ? bullet[1] : '•'}</span>
+          <span>{inline(bullet[2], key)}</span>
+        </div>
+      );
+    }
+    if (!line.trim()) return <div key={key} style={{ height: '0.5rem' }} />;
+    return <p key={key} style={{ margin: '0.25rem 0' }}>{inline(line, key)}</p>;
   });
 }
 
@@ -59,7 +90,8 @@ export default function Handouts() {
   const [text, setText] = useState('');
   const [result, setResult] = useState<QueryResult | null>(null);
   const [history, setHistory] = useState<{ q: string; answer: string }[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [phase, setPhase] = useState<Phase>(null);
+  const loading = phase !== null;
   const [error, setError] = useState('');
 
   const { data: status } = useQuery(
@@ -68,19 +100,54 @@ export default function Handouts() {
     { refetchInterval: (data: any) => (data?.scanning ? 3000 : false) }
   );
 
+  // Reads newline-delimited JSON events: passages first, then the answer as Qwen writes it.
   const run = async () => {
     const q = text.trim();
     if (!q) return;
-    setLoading(true);
+    setPhase('searching');
     setError('');
+    let current: QueryResult = { query: q, searchedAs: q, rewritten: false, searches: [], passages: [],
+      answer: '', answerError: '', fallback: false, asked: false };
+    setResult(current);
+    const update = (patch: Partial<QueryResult>) => { current = { ...current, ...patch }; setResult(current); };
     try {
-      const { data } = await axios.post<QueryResult>('/api/handouts/query', { q, mode, history: history.slice(-3) });
-      setResult(data);
-      if (data.answer) setHistory(h => [...h, { q, answer: data.answer as string }].slice(-3));
+      const response = await fetch('/api/handouts/query/stream', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ q, mode, history: history.slice(-3) }),
+      });
+      if (!response.ok || !response.body) throw new Error(String(response.status));
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+        for (const line of lines.filter(Boolean)) {
+          const event = JSON.parse(line);
+          if (event.type === 'sources') {
+            update({ searchedAs: event.question, rewritten: event.rewritten, searches: event.searches, passages: event.passages });
+          } else if (event.type === 'thinking') {
+            update({ asked: true });
+            setPhase('thinking');
+          } else if (event.type === 'text') {
+            update({ asked: true, answer: current.answer + event.text });
+            setPhase('writing');
+          } else if (event.type === 'error') {
+            update({ asked: true, answerError: event.text });
+          } else if (event.type === 'done' && event.answer) {
+            update({ asked: true, answer: event.answer, fallback: event.fallback });
+            if (!event.fallback) setHistory(h => [...h, { q: current.searchedAs, answer: event.answer }].slice(-3));
+          }
+        }
+      }
     } catch {
       setError('The handouts service did not respond. Is the backend running?');
     }
-    setLoading(false);
+    setPhase(null);
   };
 
   const rescan = async () => {
@@ -147,25 +214,44 @@ export default function Handouts() {
             style={{ padding: '0.75rem 1.5rem', background: '#667eea', color: 'white', border: 'none', borderRadius: '6px',
               cursor: 'pointer', fontWeight: 500, opacity: !text.trim() || loading ? 0.6 : 1 }}
           >
-            {loading ? (mode === 'search' ? 'Searching…' : 'Thinking…') : 'Go'}
+            {phase === 'searching' ? 'Searching…' : phase === 'thinking' ? 'Thinking…' : phase === 'writing' ? 'Writing…' : 'Go'}
           </button>
         </div>
         {mode !== 'search' && (
-          <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: '#999' }}>
-            Answers come only from the handouts, with numbered citations. They can take about a minute.
-            {history.length > 0 && ' Follow-up questions use your previous question as context.'}
+          <p style={{ margin: '0.5rem 0 0', fontSize: '0.8rem', color: '#999', display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+            <span>
+              Answers come only from the handouts, with numbered citations; the passages appear first.
+              {history.length > 0 && ' Follow-up questions understand the previous ones.'}
+            </span>
+            {history.length > 0 && !loading && (
+              <button onClick={() => { setHistory([]); setResult(null); }}
+                style={{ background: 'none', border: 'none', color: '#667eea', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}>
+                New topic
+              </button>
+            )}
           </p>
         )}
       </div>
 
       {error && <div style={{ ...card, color: '#c0392b', marginBottom: '1.5rem' }}>{error}</div>}
 
-      {result && (result.answer || result.answer_error) && (
+      {result && (result.rewritten || result.searches.length > 0) && (
+        <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: '#666' }}>
+          {result.rewritten && <>Understood as: <em>{result.searchedAs}</em></>}
+          {result.searches.length > 0 && <>{result.rewritten && ' • '}Searched for: {result.searches.join(' · ')}</>}
+        </p>
+      )}
+
+      {result && result.asked && (
         <div style={{ ...card, marginBottom: '1.5rem' }}>
           <h3 style={{ marginTop: 0, color: '#667eea' }}>Answer</h3>
-          {result.answer_error
-            ? <p style={{ color: '#c0392b' }}>{result.answer_error} The matching passages are below.</p>
-            : <div style={{ color: '#333', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{withCitations(result.answer as string)}</div>}
+          {result.answerError
+            ? <p style={{ color: '#c0392b' }}>{result.answerError} The matching passages are below.</p>
+            : result.fallback
+              ? <p style={{ color: '#a0522d' }}>The answer did not cite its sources well enough to be trusted, so it is not shown. Read the passages below.</p>
+              : result.answer
+                ? <div style={{ color: '#333', lineHeight: 1.6 }}>{renderAnswer(result.answer)}</div>
+                : <p style={{ color: '#999', margin: 0 }}>Reading the passages below…</p>}
         </div>
       )}
 
@@ -193,7 +279,7 @@ export default function Handouts() {
         </div>
       )}
 
-      {result && result.passages.length === 0 && (
+      {result && !loading && result.passages.length === 0 && (
         <div style={{ ...card, textAlign: 'center', color: '#999' }}>Nothing in the handouts matched “{result.query}”.</div>
       )}
 

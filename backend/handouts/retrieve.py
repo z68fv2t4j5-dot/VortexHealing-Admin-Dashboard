@@ -53,11 +53,21 @@ def glossary(conn) -> dict[str, list[str]]:
     found: dict[str, list[str]] = {}
     for row in conn.execute("select abbr, expansion, count(*) n from glossary_auto group by abbr, expansion order by n desc"):
         found.setdefault(row["abbr"], [row["expansion"]])
+    return {**found, **daniel_glossary()}
+
+
+def daniel_glossary() -> dict[str, list[str]]:
+    """Only the abbreviations Daniel confirmed in glossary.yaml."""
     f = kb_dir() / "glossary.yaml"
-    if f.exists():
-        for abbr, value in (yaml.safe_load(f.read_text()) or {}).items():
-            if isinstance(value, (list, str)) and str(abbr).isupper():
-                found[str(abbr)] = [value] if isinstance(value, str) else [str(v) for v in value]
+    if not f.exists():
+        return {}
+    found = {}
+    for abbr, value in (yaml.safe_load(f.read_text()) or {}).items():
+        values = [value] if isinstance(value, str) else value if isinstance(value, list) else []
+        # A bare `[?]` parses as a mapping, not text: keep only plain-text expansions.
+        values = [v for v in values if isinstance(v, str) and v.strip()]
+        if values and str(abbr).isupper():
+            found[str(abbr)] = values
     return found
 
 
