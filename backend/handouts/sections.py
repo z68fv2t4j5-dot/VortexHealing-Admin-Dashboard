@@ -27,7 +27,11 @@ SENTENCE_END = re.compile(r"(?<=[.!?])[\"'’”)]?\s+(?=[\"'‘“(]?[A-Z0-9])"
 def split(text: str) -> tuple[str, Optional[str], list[tuple[tuple[str, ...], str]]]:
     #  and friends are Word Symbol-font bullets that survive PDF extraction.
     lines = [ln.strip().lstrip("• ").strip() for ln in text.replace("\f", "\n").splitlines()]
-    lines = [ln for ln in lines if not DEBRIS.match(ln)]
+    # An indented line is a list item or a continuation, never a heading (MG ending options:
+    # short tab-indented items without full stops had each become a "section").
+    indented = [bool(re.match(r"[ \t]+\S", raw)) for raw in text.replace("\f", "\n").splitlines()]
+    keep = [i for i, ln in enumerate(lines) if not DEBRIS.match(ln)]
+    lines, indented = [lines[i] for i in keep], [indented[i] for i in keep]
     title = next((ln for ln in lines if ln), "")
     head = "\n".join(lines[:10])
     doc_date = m.group(0) if (m := DATE.search(head)) else None
@@ -58,7 +62,7 @@ def split(text: str) -> tuple[str, Optional[str], list[tuple[tuple[str, ...], st
         # PDFs hard-wrap paragraphs: a short line that continues a sentence, or is
         # continued by a lower-case line, is body text, not a heading.
         starts_block = not prev or prev[-1] in ".!?:" or prev_heading
-        if is_heading(line) and starts_block and not nxt[:1].islower():
+        if not indented[i] and is_heading(line) and starts_block and not nxt[:1].islower():
             flush()
             label = line.rstrip(":").strip()
             if TOP_LEVEL.match(line):

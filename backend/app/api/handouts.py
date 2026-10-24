@@ -1,24 +1,18 @@
-import re
+import json
 import threading
-from typing import Optional
 
-import httpx
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.core.config import settings
 from handouts import ingest, source_dir, store
+from handouts.answer import ask, ask_once
 from handouts.retrieve import search
 
 router = APIRouter()
 
 QUESTION_WORDS = ("what", "how", "why", "which", "where", "when", "who", "does", "do", "is", "are", "can", "should")
-SYSTEM_PROMPT = """You answer questions about VortexHealing class handouts using only the numbered sources given.
-Cite sources as [n] after each claim. When you combine sources into a conclusion that none of them states,
-start that sentence with "Inference:". If the sources do not answer the question, say "The handouts don't cover
-this" and name the closest sources. Never add knowledge from outside the sources. Write plain prose, with short
-headings when the answer has parts (what it is, where it comes from, which tools, which class)."""
 
 
 class HandoutsQuery(BaseModel):
@@ -38,36 +32,27 @@ def wants_answer(q: str, mode: str) -> bool:
     return q.strip().endswith("?") or (bool(words) and words[0] in QUESTION_WORDS) or len(words) >= 6
 
 
-async def answer_from(question: str, passages: list[dict]) -> tuple[Optional[str], Optional[str]]:
-    """Returns (answer, error). Citations that point at no source are removed."""
-    sources = "\n\n".join(f"[{i}] {p['title']} — {p['heading_path'] or 'start'}\n{p['text']}"
-                          for i, p in enumerate(passages, 1))
-    try:
-        async with httpx.AsyncClient(timeout=180) as client:
-            r = await client.post(f"{settings.LM_STUDIO_URL}/chat/completions", json={
-                "model": settings.QWEN_MODEL,
-                "messages": [{"role": "system", "content": SYSTEM_PROMPT},
-                             {"role": "user", "content": f"Sources:\n\n{sources}\n\nQuestion: {question}"}],
-                "temperature": 0.2, "max_tokens": 3000, "reasoning_effort": "low"})
-            r.raise_for_status()
-            text = r.json()["choices"][0]["message"]["content"] or ""
-    except (httpx.HTTPError, KeyError, ValueError) as e:
-        return None, f"Qwen is not available ({type(e).__name__}). Is LM Studio running with the model loaded?"
-    valid = range(1, len(passages) + 1)
-    return re.sub(r"\[(\d+)\]", lambda m: m.group(0) if int(m.group(1)) in valid else "", text).strip(), None
-
-
 @router.post("/handouts/query")
 async def query_handouts(query: HandoutsQuery):
-    asked = wants_answer(query.q, query.mode)
-    # Story 2 rewrites follow-ups properly; until then the previous question gives the search its context.
-    previous = [h.get("q", "") for h in query.history[-1:]]
-    passages = search(" ".join([*previous, query.q]), limit=10)
-    answer, error = (await answer_from(query.q, passages[:8])) if asked and passages else (None, None)
-    if asked and not passages:
-        answer = "The handouts don't cover this: nothing matched the question."
-    return {"query": query.q, "mode": "ask" if asked else "search", "passages": passages, "cards": [],
-            "answer": answer, "answer_error": error}
+    if not wants_answer(query.q, query.mode):
+        return {"query": query.q, "mode": "search", "passages": search(query.q, limit=10), "cards": [],
+                "answer": None, "answer_error": None}
+    result = await ask_once(query.q, query.history)
+    return {"query": query.q, "mode": "ask", "cards": [], **result}
+
+
+@router.post("/handouts/query/stream")
+async def query_handouts_stream(query: HandoutsQuery):
+    """Newline-delimited JSON events, so the page can show passages at once and the answer as it is written."""
+    async def events():
+        if wants_answer(query.q, query.mode):
+            async for event in ask(query.q, query.history):
+                yield json.dumps(event) + "\n"
+        else:
+            yield json.dumps({"type": "sources", "question": query.q, "rewritten": False, "searches": [],
+                              "passages": search(query.q, limit=10)}) + "\n"
+            yield json.dumps({"type": "done", "answer": None}) + "\n"
+    return StreamingResponse(events(), media_type="application/x-ndjson")
 
 
 @router.get("/handouts/search")
@@ -77,9 +62,9 @@ async def search_handouts(q: str):
 
 @router.post("/handouts/ask")
 async def ask_handouts(query: AskQuery):
-    passages = search(query.question, limit=8)
-    answer, error = await answer_from(query.question, passages) if passages else (None, None)
-    return {"question": query.question, "answer": answer or error, "passages": passages}
+    result = await ask_once(query.question)
+    return {"question": query.question, "answer": result["answer"] or result["answer_error"],
+            "passages": result["passages"]}
 
 
 @router.get("/handouts/status")

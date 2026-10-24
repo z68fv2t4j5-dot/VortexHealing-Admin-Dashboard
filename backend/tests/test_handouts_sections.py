@@ -29,6 +29,14 @@ def test_short_unpunctuated_lines_and_marked_lines_are_headings():
     ]
 
 
+def test_indented_list_items_stay_in_their_section():
+    text = (f"Title\n\nENDING OPTIONS\nFinal Touch: water the roots, or feed them, or rest them.\n"
+            f"\tPrune the Whole Bed (~ 5-10 min)\n\tSing to the Roses\n\tWater the Ferns Gently\n{PARA}")
+    _, _, sections = split(text)
+    assert [p for p, _ in sections] == [("ENDING OPTIONS",)]
+    assert "Prune the Whole Bed" in sections[0][1] and "Water the Ferns Gently" in sections[0][1]
+
+
 def test_a_long_numbered_paragraph_is_body_not_a_heading():
     text = f"Title\n\nDetails\n1. Roots & Soil. This is the first source and it is described at length here.\n{PARA}"
     assert headings(text) == [("Details",)]

@@ -1,12 +1,14 @@
-import httpx
+import json
+
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api import handouts as api
 from app.core.config import settings
-from handouts import ingest
+from handouts import answer, ingest
 
+from tests.test_handouts_answer import lm  # noqa: F401  (fixture)
 from tests.test_handouts_ingest import kb, scan, write  # noqa: F401  (kb is a fixture)
 
 
@@ -18,26 +20,6 @@ def client(kb):  # noqa: F811
     app = FastAPI()
     app.include_router(api.router, prefix="/api")
     return TestClient(app)
-
-
-class FakeQwen:
-    """Stands in for httpx.AsyncClient; replies with the given text or raises."""
-    reply = "Merlin structures bridge energy [1] and also [9]."
-
-    def __init__(self, *a, **k):
-        pass
-
-    async def __aenter__(self):
-        return self
-
-    async def __aexit__(self, *a):
-        return False
-
-    async def post(self, url, json):
-        if self.reply is None:
-            raise httpx.ConnectError("down")
-        return httpx.Response(200, json={"choices": [{"message": {"content": self.reply}}]},
-                              request=httpx.Request("POST", url))
 
 
 @pytest.mark.parametrize("q, mode, asked", [
@@ -52,22 +34,32 @@ def test_auto_mode_answers_questions_and_searches_terms(q, mode, asked):
 
 
 def test_search_mode_returns_passages_without_calling_qwen(client, monkeypatch):
-    monkeypatch.setattr(api.httpx, "AsyncClient", None)  # any call to Qwen would crash
+    monkeypatch.setattr(answer.httpx, "AsyncClient", None)  # any call to Qwen would crash
     data = client.post("/api/handouts/query", json={"q": "merlin structures", "mode": "search"}).json()
     assert data["mode"] == "search" and data["answer"] is None
     assert data["passages"][0]["path"] == "Tools-Review-3.doc"
 
 
-def test_ask_cites_sources_and_drops_citations_to_missing_ones(client, monkeypatch):
-    monkeypatch.setattr(api.httpx, "AsyncClient", FakeQwen)
+def test_ask_cites_sources_and_drops_citations_to_missing_ones(client, lm):  # noqa: F811
+    lm(reply="Merlin structures bridge energy into the heart [1] and also [9].")
     data = client.post("/api/handouts/query", json={"q": "what do merlin structures do?"}).json()
     assert data["mode"] == "ask"
     assert "[1]" in data["answer"] and "[9]" not in data["answer"]
 
 
-def test_ask_reports_qwen_down_but_still_returns_passages(client, monkeypatch):
-    monkeypatch.setattr(api.httpx, "AsyncClient", FakeQwen)
-    monkeypatch.setattr(FakeQwen, "reply", None)
+def test_the_stream_sends_passages_before_the_answer(client, lm):  # noqa: F811
+    lm(reply="Merlin structures bridge energy into the heart [1].")
+    with client.stream("POST", "/api/handouts/query/stream", json={"q": "what do merlin structures do?"}) as r:
+        events = [json.loads(line) for line in r.iter_lines() if line]
+    assert events[0]["type"] == "sources" and events[0]["passages"]
+    assert events[-1]["type"] == "done" and "[1]" in events[-1]["answer"]
+    with client.stream("POST", "/api/handouts/query/stream", json={"q": "merlin", "mode": "search"}) as r:
+        events = [json.loads(line) for line in r.iter_lines() if line]
+    assert [e["type"] for e in events] == ["sources", "done"]
+
+
+def test_ask_reports_qwen_down_but_still_returns_passages(client, lm):  # noqa: F811
+    lm(fail=True)
     data = client.post("/api/handouts/query", json={"q": "what do merlin structures do?"}).json()
     assert data["answer"] is None and "LM Studio" in data["answer_error"]
     assert data["passages"]

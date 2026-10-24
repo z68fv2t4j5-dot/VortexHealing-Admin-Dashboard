@@ -4,9 +4,10 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 
 ## What is true now (measured 2026-10-23)
 
-- Backend suite: 91 tests (email campaign API, class rules, reminders, handouts), run by `cd backend && python -m pytest`.
+- Backend suite: 105 tests (email campaign API, class rules, reminders, handouts), run by `cd backend && python -m pytest`.
 - Handouts knowledge base, story 1 of `docs/plans/PLAN-handouts-knowledge-base-2610212112.md` (ADR-0008): `backend/handouts/` keeps one current file per handout (74 indexed, 16 older versions retired, 1 identical duplicate skipped), splits them into 1,691 sections and 2,358 passages, and searches by keywords plus nomic embeddings. Index, glossary, notes and eval questions live in `HANDOUTS_KB_DIR` (`~/Documents/Handouts-KB`), outside the repository. Daniel's 21 eval questions: 21/21 find an expected handout in the top 5.
-- Handouts page: one box with Auto / Search / Ask; Ask answers through Qwen with `[n]` citations; Rescan picks up new or revised handouts. A full index build takes about 30 seconds; the startup scan skips unchanged files.
+- Handouts page: one box with Auto / Search / Ask; Rescan picks up new or revised handouts. A full index build takes about 30 seconds; the startup scan skips unchanged files.
+- Handouts story 2 (answers): follow-ups are rewritten and multi-part questions split (Qwen, thinking off), Qwen answers with low thinking and `[n]` citations, under-cited answers are withheld, and the page streams: passages in about 1 s, a simple answer done in about 15-25 s, a multi-part one in about 45 s. `python -m handouts eval --answers` writes a marking sheet to `HANDOUTS_KB_DIR/eval/`.
 - Class prerequisites come from the flowchart in `backend/app/class_rules.py`; completed classes come from full-word class tags (ADR-0006). APAC Wizards count as having done Foundational.
 - Email page: APAC Wizards list and full-word class tags only; a "Reminders due" panel (ADR-0007). `/api/email/send` records a send; it does not deliver mail.
 - Raw agent transcripts stay on this machine (ADR-0005); session logs carry no student names, emails or handout text.
@@ -21,8 +22,9 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 
 ## Open threads
 
-- Handouts story 2 (answers): sub-query planning, follow-up rewriting, stricter citation checks; then story 3 (knowledge map, overnight extraction with Qwen) and story 4 (teacher notes). Prompts for the local agent live in `~/Documents/Handouts-KB/QWEN-PROMPTS.md`; in story 1 Qwen could not finish its steps, so plan on Claude building or closely supervising.
-- Known answer weakness: "what class do you get LifeEssences?" returns a hedged answer although the MF review's overview says "in this class"; stories 2-3 address it.
+- Daniel is marking the answer sheet from `python -m handouts eval --answers`; turn his "wrong" marks into fixes (retrieval, prompt, or teacher notes in story 4). Question 14 (genetic modification as one step) is open: the answer cites the MI protocol, Daniel said Jewel.
+- Handouts story 3 (knowledge map, overnight extraction with Qwen) and story 4 (teacher notes). Prompts for the local agent live in `~/Documents/Handouts-KB/QWEN-PROMPTS.md`; Qwen could not finish story 1, so plan on Claude building or closely supervising.
+- The Tasks page's AI call (`backend/app/api/ai_tasks.py`) names its model `"qwen"`; use `settings.QWEN_MODEL` or LM Studio may load a second copy.
 - Classes page shows wrong prerequisites: `backend/seed_classes.py` predates the flowchart; regenerate its `prerequisites` from `class_rules.py` (back up the database before reseeding).
 - Email delivery: approving a reminder or campaign only records it. Decide the sending account; the approval step stays.
 - Tooling fixes in their own PRs: `tsc` fails on `tsconfig.json` (TS5070), ESLint 9 cannot read the legacy config, CI should add `--cov=handouts`.
@@ -35,10 +37,10 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 1. `python3` must be 3.11+; on this Mac that relies on `~/.local/bin` being first on PATH (set in `~/.zshrc`).
 2. Every new key in `backend/.env` needs a field on `Settings` in `backend/app/core/config.py` first; that class forbids unknown keys and the whole backend fails to start.
 3. The dashboard backend runs on port 8001, because Daniel's finances app uses 8000. Pages must call relative `/api` URLs; a hard-coded `localhost:8000` reaches the wrong app.
-4. LM Studio: load `qwen/qwen3.8-27b` at 49152 context and `text-embedding-nomic-embed-text-v1.5`; without the embedder, search falls back to keywords. In Continue, Qwen needs `maxTokens: 12000` and `reasoning_effort: low` or it spends its whole reply thinking.
+4. LM Studio: load `qwen/qwen3.8-27b` at 49152 context and `text-embedding-nomic-embed-text-v1.5`; without the embedder, search falls back to keywords. Call the model by that exact identifier: `qwen3.8-27b` without `qwen/` made LM Studio load a second, slower copy (`lms ps` shows it; `lms unload qwen3.8-27b` removes it). In Continue, Qwen needs `maxTokens: 12000` and `reasoning_effort: low` or it spends its whole reply thinking.
 5. Never commit a check that reads real student data or handout text; run it outside the repository and record only counts.
 6. Changing a model does not change its existing table; back up `backend/vortexhealing.db` and rebuild the table.
 
 ## Kickoff text (paste into the next session)
 
-> Read NEXT-STEPS.md in full, then AGENTS.md, then docs/memory/MEMORY.md, then docs/ARCHITECTURE.md. Run harness-open. Then: ask Daniel whether to continue with handouts story 2 (answers) or plan real email delivery.
+> Read NEXT-STEPS.md in full, then AGENTS.md, then docs/memory/MEMORY.md, then docs/ARCHITECTURE.md. Run harness-open. Then: ask Daniel for his marks on the latest answer sheet in `~/Documents/Handouts-KB/eval/`, and whether to continue with handouts story 3 (knowledge map) or plan real email delivery.
