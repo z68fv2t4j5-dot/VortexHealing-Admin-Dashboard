@@ -111,3 +111,22 @@ def test_api_adds_edits_lists_serves_and_deletes_notes(kb):  # noqa: F811
     assert client.delete(f"/api/handouts/notes/{note['file']}").json() == {"deleted": note["file"]}
     assert client.get("/api/handouts/notes").json()["notes"] == []
     assert client.get(f"/api/handouts/file/{note_passage['document_id']}").status_code == 404
+
+
+def test_api_error_paths_for_notes(kb):  # noqa: F811
+    write(kb, "Rose-Review-1.doc", "Roses need sun every day. " * 20)
+    scan()
+    app = FastAPI()
+    app.include_router(api.router, prefix="/api")
+    client = TestClient(app)
+    note = client.post("/api/handouts/notes", json={"topic": "Shade roses", "body": "Roses grow in shade."}).json()
+    assert client.put(f"/api/handouts/notes/{note['file']}", json={"topic": "Shade roses", "body": "  "}).status_code == 400
+    assert client.delete("/api/handouts/notes/missing.md").status_code == 404
+    assert client.delete("/api/handouts/notes/bad name.md").status_code == 404
+    c = conn()
+    doc_id = store.get_document(c, f"notes/{note['file']}")["id"]
+    (notes.notes_dir() / note["file"]).unlink()  # gone from disk, still in the index until the next scan
+    assert client.get(f"/api/handouts/file/{doc_id}").status_code == 404
+    c.execute("update documents set path = 'notes/../glossary.yaml' where id = ?", (doc_id,))
+    c.commit()
+    assert client.get(f"/api/handouts/file/{doc_id}").status_code == 404
