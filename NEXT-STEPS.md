@@ -4,7 +4,7 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 
 ## What is true now (measured 2026-10-23)
 
-- Backend suite: 133 tests (email campaign API, class rules, reminders, handouts), run by `cd backend && python -m pytest`.
+- Backend suite: 136 tests (email campaign API, class rules, reminders, handouts), run by `cd backend && python -m pytest`.
 - Handouts knowledge base, story 1 of `docs/plans/PLAN-handouts-knowledge-base-2610212112.md` (ADR-0008): `backend/handouts/` keeps one current file per handout (74 indexed, 16 older versions retired, 1 identical duplicate skipped), splits them into 1,691 sections and 2,358 passages, and searches by keywords plus nomic embeddings. Index, glossary, notes and eval questions live in `HANDOUTS_KB_DIR` (`~/Documents/Handouts-KB`), outside the repository. Daniel's 21 eval questions: 21/21 find an expected handout in the top 5.
 - Handouts page: one box with Auto / Search / Ask; Rescan picks up new or revised handouts. A full index build takes about 30 seconds; the startup scan skips unchanged files.
 - Handouts story 2 (answers): follow-ups are rewritten and multi-part questions split (Qwen, thinking off), Qwen answers with low thinking and `[n]` citations, under-cited answers are withheld, and the page streams: passages in about 1 s, a simple answer done in about 15-25 s, a multi-part one in about 45 s. `python -m handouts eval --answers` writes a marking sheet to `HANDOUTS_KB_DIR/eval/`.
@@ -23,7 +23,7 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 ## Open threads
 
 - Handouts story 3 (knowledge map): 6,331 entries and 13,551 facts built by Qwen from 1,370 sections (about 3.5 hours, 4 at a time; cached, so re-indexing does not repeat it). Cards on the page, a Browse tab, and answers that use the map; `python -m handouts extract-knowledge` reads only new or changed sections, `apply-knowledge` rebuilds from the cache.
-- Handouts story 4 (teacher notes): notes live as Markdown files in `HANDOUTS_KB_DIR/notes`; the Handouts page has "Add a note" on answers and cards and a Notes tab (edit, delete). Two notes so far ("External karma"; "Genetic modification: Omega 2 steps, Jewel 1 step"), and both questions now answer as Daniel expects. The plan's four stories are done.
+- Handouts story 4 (teacher notes): notes live as Markdown files in `HANDOUTS_KB_DIR/notes`; the Handouts page has "Add a note" on answers and cards and a Notes tab (edit, delete). Ten notes so far (two from 2026-10-21/24 and eight from Daniel's marking on 2026-10-25); each question they target now answers as Daniel expects. A local marking page (`eval/answers-*-marking.html`, made from a sheet) lets Daniel mark answers with buttons and paste the result. The plan's four stories are done.
 - Daniel is checking `~/Documents/Handouts-KB/handout_classes.yaml` (which class each handout belongs to; Sensing Review is set to Sensing I).
 - Daniel is marking the answer sheets from `python -m handouts eval --answers` (latest in `~/Documents/Handouts-KB/eval/`); turn his "wrong" marks into fixes: retrieval or prompt where the handouts say it, a teacher note where they do not.
 - Ideas Daniel deferred: answer feedback (thumbs) to grow the eval set, audio transcription (the EarthWorks recordings), class-gated access for students. `~/Documents/Handouts-KB/QWEN-PROMPTS.md` is out of date: Qwen could not finish story 1, and stories 1-4 were built by Claude.

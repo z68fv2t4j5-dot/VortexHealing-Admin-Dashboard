@@ -97,12 +97,34 @@ def test_gather_merges_searches_within_the_limit(indexed):
 
 def test_gather_takes_at_most_three_passages_from_one_handout(kb):  # noqa: F811
     # Each search alone returns 3 passages of the long handout, different ones per search.
-    write(kb, "Long-Review-1.doc", "Roses need sun every single day. " * 400 + "Ferns like deep shade most days. " * 400)
+    # Distinct sentences, so the passages are not duplicates of each other.
+    write(kb, "Long-Review-1.doc", "".join(f"Roses need sun on day {i}. " for i in range(400))
+          + "".join(f"Ferns like deep shade in week {i}. " for i in range(400)))
     write(kb, "Short-Review-1.doc", "Roses and ferns share a garden bed. " * 20)
     scan()
     passages = answer.gather("roses sun", ["ferns shade"], conn=store.connect(ingest.db_path()), limit=8)
     assert sum(p["path"] == "Long-Review-1.doc" for p in passages) == 3
     assert any(p["path"] == "Short-Review-1.doc" for p in passages)
+
+
+def test_repeated_text_is_given_to_qwen_once(kb):  # noqa: F811
+    text = "".join(f"Thorn knots and roses, point {i}: the gardener checks bed {i * 7} at dawn. " for i in range(15))  # one passage
+    write(kb, "Rose-Review-1.doc", text)
+    write(kb, "Manual-2026.doc", text + "Plus one extra closing line.")  # a reprint with a small addition
+    scan()
+    passages = answer.gather("thorn knots roses", [], conn=store.connect(ingest.db_path()))
+    assert len(passages) == 1
+
+
+def test_matching_notes_come_on_top_of_the_handout_passages(kb):  # noqa: F811
+    from handouts import notes
+    topics = {"Alpha": "soil pH and lime", "Beta": "pruning shears and frost", "Gamma": "aphids and ladybirds"}
+    for name, topic in topics.items():
+        write(kb, f"{name}-Notes.doc", f"Thorn knots and roses: {topic}. " + " ".join(f"{name.lower()}{w}" for w in range(40)))
+    notes.save("Thorn knots", "Thorn knots and roses: my own view.")
+    scan()
+    passages = answer.gather("thorn knots roses", [], conn=store.connect(ingest.db_path()), limit=2)
+    assert [p["source_kind"] for p in passages] == ["note", "handout", "handout"]
 
 
 def test_the_prompt_carries_daniels_glossary(kb):  # noqa: F811
