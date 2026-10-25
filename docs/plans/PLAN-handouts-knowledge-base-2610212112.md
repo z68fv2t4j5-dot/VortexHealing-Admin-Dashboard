@@ -1,5 +1,14 @@
 # Plan (feature): handouts knowledge base (v2 of Handouts)
-Status: story 1 done 2026-10-23; story 2 done 2026-10-23; story 3 done 2026-10-24 (story 4 open).
+Status: done 2026-10-24 (stories 1-4).
+
+Departures in story 4, as built:
+- Notes are indexed by every scan and by `refresh_notes` after a save (about a second), not by a separate watcher. They are never sent for knowledge extraction.
+- Ranking: a matching note (a keyword hit or the top 10 by meaning) gets one extra first-place vote, so it beats an equally matching handout passage but does not push into loosely related questions.
+- Notes that name an entity show on its card and are always brought into answers about it; this, not ranking, is what fixed "external karma" and the Omega/Jewel genetic-modification question.
+- Edit and delete were added to the plan's add-and-list, on a Notes tab; file names are validated so the API cannot reach outside the notes folder.
+- Found while checking: the answer merged Jewel with Magical Jewel; the prompt now says to keep class and tool names exactly as written.
+- `/api/handouts/search` and `/api/handouts/ask` removed as planned; `/query` replaces both.
+- From Daniel's marks on the story 3 sheet (13 right, 8 partly, 0 wrong): near-duplicate passages are dropped (the 2026 manual reprints Foundational handouts, which had filled answer slots twice); matching notes come on top of the handout passages instead of taking their slots; "what releases X / where does X come from" questions get one evidence passage per class in flowchart order. Daniel's 8 corrections were saved as teacher notes in his words; all 8 now appear in their answers, and the "40% deeper" misreading in the genetics answer is gone. Average answer time 33 s (was 30).
 
 Departures in story 3, as built (Daniel chose the knowledge map before teacher notes):
 - Extraction runs with thinking off and a non-strict JSON schema plus an example of the shape: with the schema enforced strictly, Qwen returned empty lists in 10 tokens; without an example it mostly did too. At most 15 entities and 20 facts per section, `max_tokens` 6000: longer replies were cut off mid-JSON.

@@ -23,7 +23,8 @@ def evaluate() -> None:
     hits = 0
     for item in questions:
         query = " ".join([*item.get("history", []), item["q"]])
-        found = [p["family"] for p in search(query, limit=5)]
+        # Handout passages only: answers add matching teacher notes on top of these, not in their place.
+        found = [p["family"] for p in search(query, limit=10) if p["source_kind"] == "handout"][:5]
         expected = {f.lower() for f in item["expect"]}
         hit = bool(expected & set(found))
         hits += hit

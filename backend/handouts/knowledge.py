@@ -129,7 +129,7 @@ def pending(conn) -> list:
     return conn.execute(
         "select s.id, s.text, s.text_sha, s.heading_path, d.title, d.family from sections s"
         " join documents d on d.id = s.document_id"
-        " where d.status = 'KEEP' and s.text is not null and length(s.text) > 0"
+        " where d.status = 'KEEP' and d.source_kind = 'handout' and s.text is not null and length(s.text) > 0"
         " and not exists (select 1 from extraction_cache c where c.text_sha = s.text_sha and c.model = ?)"
         " group by s.text_sha order by d.path, s.ord", (model_name(),)).fetchall()
 
@@ -340,8 +340,11 @@ def card(conn, entity_id: int) -> Optional[dict]:
     introduced = sorted({f["object"] for f in facts if f["predicate"] == "introduced_in" and f["object_type"] == "class"})
     # Prefer the definition from the class that introduces it.
     definitions.sort(key=lambda d: (d["source"]["class"] not in introduced, len(d["text"])))
+    from handouts.notes import for_entity
+
     return {"id": e["id"], "name": e["name"], "type": e["type"], "aliases": json.loads(e["aliases"] or "[]"),
-            "introduced_in": introduced, "definitions": definitions[:3], "facts": facts, "incoming": incoming}
+            "introduced_in": introduced, "definitions": definitions[:3], "facts": facts, "incoming": incoming,
+            "notes": for_entity(conn, e["name"])}
 
 
 def browse(conn, kind: Optional[str] = None, query: str = "", limit: int = 300) -> list[dict]:

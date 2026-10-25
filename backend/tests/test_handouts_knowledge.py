@@ -184,3 +184,14 @@ def test_api_lists_entities_and_serves_cards(mapped, monkeypatch):
     assert started == [1]
     search = client.post("/api/handouts/query", json={"q": "rose structure", "mode": "search"}).json()
     assert [c["name"] for c in search["cards"]] == ["Rose Structure"]
+
+
+def test_what_releases_an_entry_is_spread_one_per_class(mapped):
+    thorn = entity_id(mapped, "Thorn Knot")
+    spread = answer.class_spread(mapped, thorn)
+    assert {f["subject"] for f in spread} == {"Rose Structure", "Multi-Frequency"}
+    assert len({f["family"] for f in spread}) == 2  # one per class
+    card = answer.trim(knowledge.card(mapped, thorn))
+    passages, lines = answer.add_evidence(mapped, [], [card])
+    assert any(ln.startswith("- Rose Structure releases Thorn Knot") for ln in lines)
+    assert any(ln.startswith("- Multi-Frequency releases Thorn Knot") for ln in lines)

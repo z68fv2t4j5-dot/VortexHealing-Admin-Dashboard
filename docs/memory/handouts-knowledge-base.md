@@ -5,7 +5,7 @@ metadata:
   type: project
 ---
 
-**Fact:** `backend/handouts/` indexes one current file per handout into `kb.sqlite` in `HANDOUTS_KB_DIR` (outside the repo) and searches by keywords plus nomic embeddings; `answer.py` streams cited Qwen answers (helpers with thinking off, the answer with low); `knowledge.py` adds a Qwen-built map of entities and facts with cards. Story 4 (teacher notes) follows the plan.
+**Fact:** `backend/handouts/` indexes one current file per handout into `kb.sqlite` in `HANDOUTS_KB_DIR` (outside the repo) and searches by keywords plus nomic embeddings; `answer.py` streams cited Qwen answers (helpers with thinking off, the answer with low); `knowledge.py` adds a Qwen-built map of entities and facts with cards; `notes.py` adds Daniel's teacher notes, which answers follow over the handouts.
 
 **Why:** v1 read no `.doc` files, and answers took a minute.
 

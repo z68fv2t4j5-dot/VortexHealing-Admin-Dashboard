@@ -19,7 +19,11 @@ MAX_SOURCES_MULTIPART = 10
 SOURCE_WORD_BUDGET = 6500  # about 9,000 tokens, leaving room for the answer
 MIN_CITED_SHARE = 0.5
 HISTORY_TURNS = 3
-MAX_EVIDENCE = 4  # extra passages pulled in because a knowledge-map fact points at them
+MAX_EVIDENCE = 6  # extra passages pulled in because a knowledge-map fact points at them
+MAX_NOTES = 2  # matching teacher notes come on top of the handout passages, not instead of them
+DUPLICATE_OVERLAP = 0.8  # word overlap at which two passages count as the same text (the 2026 manual reprints handouts)
+# Incoming facts answer "what releases X?" and "where does X come from?"; one passage per class, in flowchart order.
+INCOMING_EVIDENCE = ("releases", "is_source_of")
 MAP_LINES = 16
 # Facts most useful for answering come first.
 FACT_ORDER = ["introduced_in", "done_in_class", "releases", "is_source_of", "requires", "located_in",
@@ -34,9 +38,12 @@ start that sentence with "Inference:". If the sources do not answer the question
 this" and name the closest sources. Never add knowledge from outside the sources. Write plain prose, with short
 headings when the answer has parts (what it is, where it comes from, which tools, which class).
 Be concise: about 250 words unless the question asks for a list, a protocol or a comparison.
+Use class and tool names exactly as the sources write them and never merge similar names: for example Jewel,
+Magical Jewel and Merlin's Jewel are three different things.
 Each source is labelled with its handout's title. A handout titled "<Class> Review" is the review for that class,
 so "in this class" inside it means that class.
-Teacher notes, when given, come from the teacher and override the handouts where they disagree.
+Sources labelled "Teacher note" come from the teacher: treat them as correct, let them override the handouts
+where they disagree, and cite them like any other source.
 A "Knowledge map" list may follow the sources: facts already taken from those sources, each ending with its
 source number. Use it to connect and compare classes (for example how something is done in one class and
 another), and cite the source numbers it gives."""
@@ -119,8 +126,23 @@ async def split(question: str) -> list[str]:
     return [p.strip() for p in parts if isinstance(p, str) and p.strip()][:3]
 
 
+def _words(text: str) -> set[str]:
+    return set(re.findall(r"[a-z0-9’']+", text.lower()))
+
+
+def is_duplicate(p: dict, chosen: list[dict]) -> bool:
+    """The same text under another handout's name (the 2026 manual reprints whole Foundational handouts)."""
+    mine = _words(p["text"])
+    for other in chosen:
+        theirs = _words(other["text"])
+        if mine and theirs and len(mine & theirs) / len(mine | theirs) >= DUPLICATE_OVERLAP:
+            return True
+    return False
+
+
 def gather(question: str, searches: list[str], conn=None, limit: int = MAX_SOURCES) -> list[dict]:
-    """Passages for the question and each sub-query, fused, at most 3 per handout, within the word budget."""
+    """Passages for the question and each sub-query, fused, at most 3 per handout, without repeats, within the
+    word budget. Up to MAX_NOTES matching teacher notes are added on top of the handout passages."""
     by_id: dict[int, dict] = {}
     rankings = []
     for q in [question, *searches]:
@@ -128,18 +150,21 @@ def gather(question: str, searches: list[str], conn=None, limit: int = MAX_SOURC
         by_id.update({h["chunk_id"]: h for h in hits})
         rankings.append([h["chunk_id"] for h in hits])
     fused = fuse(rankings)
-    chosen, per_doc, words = [], {}, 0
+    chosen, notes, per_doc, words = [], [], {}, 0
     for cid in sorted(fused, key=fused.get, reverse=True):
         p = by_id[cid]
+        if p.get("source_kind") == "note":
+            if len(notes) < MAX_NOTES:
+                notes.append(p)
+            continue
         size = len(p["text"].split())
-        if per_doc.get(p["document_id"], 0) >= 3 or words + size > SOURCE_WORD_BUDGET:
+        if len(chosen) >= limit or per_doc.get(p["document_id"], 0) >= 3 or words + size > SOURCE_WORD_BUDGET \
+                or is_duplicate(p, chosen):
             continue
         per_doc[p["document_id"]] = per_doc.get(p["document_id"], 0) + 1
         words += size
         chosen.append(p)
-        if len(chosen) >= limit:
-            break
-    return chosen
+    return notes + chosen
 
 
 def add_evidence(conn, passages: list[dict], cards: list[dict]) -> tuple[list[dict], list[str]]:
@@ -151,20 +176,45 @@ def add_evidence(conn, passages: list[dict], cards: list[dict]) -> tuple[list[di
         if sec:
             by_section.setdefault(sec[0], i)
     lines, added = [], 0
+
+    def take(section_id: int) -> Optional[int]:
+        """The passage number of the section's first chunk, adding it when there is room and it is new."""
+        nonlocal added
+        if section_id in by_section:
+            return by_section[section_id]
+        if added >= MAX_EVIDENCE:
+            return None
+        first = conn.execute("select id from chunks where section_id = ? order by ord limit 1", (section_id,)).fetchone()
+        found = _passages(conn, [first[0]], {first[0]: 0.0}, 1) if first else []
+        if not found or is_duplicate(found[0], passages):
+            return None
+        passages.append(found[0])
+        by_section[section_id] = len(passages)
+        added += 1
+        return len(passages)
+
     for c in cards:
-        for f in sorted(c["facts"], key=lambda f: FACT_ORDER.index(f["predicate"])):
-            section_id = f["source"]["section_id"]
-            if section_id not in by_section and added < MAX_EVIDENCE:
-                first = conn.execute("select id from chunks where section_id = ? order by ord limit 1", (section_id,)).fetchone()
-                found = _passages(conn, [first[0]], {first[0]: 0.0}, 1) if first else []
+        for n in c.get("notes", []):
+            first = conn.execute("select c.id from chunks c join documents d on d.id = c.document_id"
+                                 " where d.path = ? order by c.ord limit 1", (f"notes/{n['file']}",)).fetchone()
+            if first and not any(p["chunk_id"] == first[0] for p in passages):
+                found = _passages(conn, [first[0]], {first[0]: 0.0}, 1)
                 if found:
                     passages.append(found[0])
-                    by_section[section_id] = len(passages)
-                    added += 1
-            if section_id not in by_section:
+            number = next((i for i, p in enumerate(passages, 1) if first and p["chunk_id"] == first[0]), None)
+            if number:
+                lines.append(f"- Teacher note on {n['topic']} [{number}]")
+        for f in class_spread(conn, c["id"]):
+            number = take(f["section_id"])
+            if number:
+                detail = f" ({f['detail']})" if f["detail"] else ""
+                lines.append(f"- {f['subject']} {FACT_WORDS[f['predicate']]} {c['name']}{detail} [{number}]")
+        for f in sorted(c["facts"], key=lambda f: FACT_ORDER.index(f["predicate"])):
+            number = take(f["source"]["section_id"])
+            if not number:
                 continue
             detail = f" ({f['detail']})" if f["detail"] else ""
-            line = f"- {c['name']} {FACT_WORDS[f['predicate']]} {f['object']}{detail} [{by_section[section_id]}]"
+            line = f"- {c['name']} {FACT_WORDS[f['predicate']]} {f['object']}{detail} [{number}]"
             if line not in lines:
                 lines.append(line)
             if len(lines) >= MAP_LINES:
@@ -172,10 +222,33 @@ def add_evidence(conn, passages: list[dict], cards: list[dict]) -> tuple[list[di
     return passages, lines
 
 
+def class_spread(conn, entity_id: int, per_entity: int = 4) -> list[dict]:
+    """What releases this entity, or what it comes from: one fact per class, earliest class on the flowchart
+    first, so an answer can say how it is done at each level."""
+    from app.class_rules import CLASSES
+
+    order = {knowledge.norm(name): i for i, name in enumerate(CLASSES)}
+    classes = knowledge.handout_classes()
+    marks = ",".join("?" * len(INCOMING_EVIDENCE))
+    rows = conn.execute(
+        f"select f.predicate, f.detail, f.section_id, s.name subject, d.family from facts f"
+        f" join entities s on s.id = f.subject_id join sections x on x.id = f.section_id"
+        f" join documents d on d.id = x.document_id"
+        f" where f.object_id = ? and f.predicate in ({marks}) and d.status = 'KEEP'",
+        (entity_id, *INCOMING_EVIDENCE)).fetchall()
+    best: dict[str, dict] = {}
+    for r in rows:
+        klass = classes.get(r["family"])
+        if klass and klass not in best:
+            best[klass] = dict(r)
+    ranked = sorted(best.items(), key=lambda kv: order.get(knowledge.norm(kv[0]), len(order)))
+    return [f for _, f in ranked][:per_entity]
+
+
 def sources_text(passages: list[dict]) -> str:
     def label(p):
         if p.get("source_kind") == "note":
-            return f"Teacher note ({p.get('doc_date') or p['title']})"
+            return f"{p['title']} ({p['doc_date']})" if p.get("doc_date") else p["title"]
         version = f", version {p['version']}" if p.get("version") else ""
         return f"{p['title']}{version} — {p['heading_path'] or 'opening section'}"
     return "\n\n".join(f"[{i}] {label(p)}\n{p['text']}" for i, p in enumerate(passages, 1))

@@ -17,6 +17,8 @@ Build the index in `backend/handouts/`: a catalogue keeps one file per handout f
 - The index is rebuilt, not migrated: a schema change means deleting `kb.sqlite` and scanning again (about 30 seconds).
 - `sentence-transformers` (and torch) and `python-docx` leave the dependencies; `PyYAML` is declared because Daniel edits YAML files the code reads.
 
+- Added with story 4 (2026-10-24): Daniel's teacher notes are Markdown files in `HANDOUTS_KB_DIR/notes`, a trusted source layer: cited as "Teacher note", ranked above equally matching handout passages, and followed by answers where the handouts disagree. They cost nothing to keep in sync: a scan or a save re-indexes them.
+
 ## Alternatives rejected
 
 - Keep sentence-transformers: a heavy dependency for a weaker model, when LM Studio already serves an embedder.
