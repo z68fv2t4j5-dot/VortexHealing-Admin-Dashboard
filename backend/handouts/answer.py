@@ -20,6 +20,8 @@ SOURCE_WORD_BUDGET = 6500  # about 9,000 tokens, leaving room for the answer
 MIN_CITED_SHARE = 0.5
 HISTORY_TURNS = 3
 MAX_EVIDENCE = 6  # extra passages pulled in because a knowledge-map fact points at them
+# Quick answers: thinking off, fewer passages, a short reply (about 5-10 s instead of about 30 s).
+QUICK_SOURCES, QUICK_EVIDENCE, QUICK_WORDS = 6, 2, 120
 MAX_NOTES = 2  # matching teacher notes come on top of the handout passages, not instead of them
 DUPLICATE_OVERLAP = 0.8  # word overlap at which two passages count as the same text (the 2026 manual reprints handouts)
 # Incoming facts answer "what releases X?" and "where does X come from?"; one passage per class, in flowchart order.
@@ -167,7 +169,8 @@ def gather(question: str, searches: list[str], conn=None, limit: int = MAX_SOURC
     return notes + chosen
 
 
-def add_evidence(conn, passages: list[dict], cards: list[dict]) -> tuple[list[dict], list[str]]:
+def add_evidence(conn, passages: list[dict], cards: list[dict],
+                 max_evidence: int = MAX_EVIDENCE) -> tuple[list[dict], list[str]]:
     """Adds the passages behind the cards' key facts and returns the knowledge-map lines that cite them."""
     passages = list(passages)
     by_section = {}
@@ -182,7 +185,7 @@ def add_evidence(conn, passages: list[dict], cards: list[dict]) -> tuple[list[di
         nonlocal added
         if section_id in by_section:
             return by_section[section_id]
-        if added >= MAX_EVIDENCE:
+        if added >= max_evidence:
             return None
         first = conn.execute("select id from chunks where section_id = ? order by ord limit 1", (section_id,)).fetchone()
         found = _passages(conn, [first[0]], {first[0]: 0.0}, 1) if first else []
@@ -273,30 +276,32 @@ def check_citations(answer: str, n_sources: int) -> tuple[str, float]:
     return cleaned.strip(), sum(bool(re.search(r"\[\d+\]", b)) for b in blocks) / len(blocks)
 
 
-async def ask(question: str, history: Optional[list[dict]] = None, conn=None) -> AsyncIterator[dict]:
+async def ask(question: str, history: Optional[list[dict]] = None, conn=None, quick: bool = False) -> AsyncIterator[dict]:
     """Events for the page: sources, thinking, text chunks, then done (or error)."""
     try:
         standalone = await rewrite(question, history or [])
-        searches = await split(standalone)
+        searches = [] if quick else await split(standalone)
     except QwenUnavailable:
         standalone, searches = question, []
-    passages = gather(standalone, searches, conn=conn, limit=MAX_SOURCES_MULTIPART if searches else MAX_SOURCES)
+    limit = QUICK_SOURCES if quick else MAX_SOURCES_MULTIPART if searches else MAX_SOURCES
+    passages = gather(standalone, searches, conn=conn, limit=limit)
     kconn = conn or store.connect(_db_path())
     cards = [c for c in (knowledge.card(kconn, i) for i in knowledge.find_entities(kconn, standalone)) if c]
-    passages, map_lines = add_evidence(kconn, passages, cards)
+    passages, map_lines = add_evidence(kconn, passages, cards, QUICK_EVIDENCE if quick else MAX_EVIDENCE)
     yield {"type": "sources", "question": standalone, "rewritten": standalone != question,
            "searches": searches, "passages": passages, "cards": [trim(c) for c in cards]}
     if not passages:
         yield {"type": "done", "answer": "The handouts don't cover this: nothing matched the question.",
                "cited_share": 1.0, "fallback": False}
         return
-    messages = [{"role": "system", "content": system_prompt()},
+    prompt = system_prompt() + (f"\nAnswer in at most {QUICK_WORDS} words." if quick else "")
+    messages = [{"role": "system", "content": prompt},
                 {"role": "user", "content": f"Sources:\n\n{sources_text(passages)}\n\n"
                  + (f"Knowledge map:\n" + "\n".join(map_lines) + "\n\n" if map_lines else "")
                  + f"Question: {standalone}"}]
     parts, said_thinking = [], False
     try:
-        async for kind, chunk in stream(messages, "low", 3000):
+        async for kind, chunk in stream(messages, "none" if quick else "low", 800 if quick else 3000):
             if kind == "thinking":
                 if not said_thinking:
                     said_thinking = True
@@ -328,11 +333,11 @@ def _db_path():
     return db_path()
 
 
-async def ask_once(question: str, history: Optional[list[dict]] = None, conn=None) -> dict:
+async def ask_once(question: str, history: Optional[list[dict]] = None, conn=None, quick: bool = False) -> dict:
     """The whole ask flow as one result, for the non-streaming endpoints and the eval."""
     result = {"question": question, "standalone": question, "searches": [], "passages": [], "cards": [],
               "answer": None, "answer_error": None, "fallback": False, "cited_share": None}
-    async for event in ask(question, history, conn=conn):
+    async for event in ask(question, history, conn=conn, quick=quick):
         if event["type"] == "sources":
             result.update(standalone=event["question"], searches=event["searches"], passages=event["passages"],
                           cards=event.get("cards", []))
