@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.core.config import settings
-from handouts import ingest, knowledge, notes, source_dir, store
+from handouts import improve, ingest, knowledge, model, notes, source_dir, store
 from handouts.answer import ask, ask_once, trim
 from handouts.retrieve import search
 
@@ -31,7 +31,7 @@ class NoteIn(BaseModel):
 
 def wants_answer(q: str, mode: str) -> bool:
     if mode != "auto":
-        return mode == "ask"
+        return mode in ("ask", "quick")
     words = q.lower().split()
     return q.strip().endswith("?") or (bool(words) and words[0] in QUESTION_WORDS) or len(words) >= 6
 
@@ -49,7 +49,7 @@ async def query_handouts(query: HandoutsQuery):
     if not wants_answer(query.q, query.mode):
         return {"query": query.q, "mode": "search", "passages": search(query.q, limit=10), "cards": cards_for(query.q),
                 "answer": None, "answer_error": None}
-    result = await ask_once(query.q, query.history)
+    result = await ask_once(query.q, query.history, quick=query.mode == "quick")
     return {"query": query.q, "mode": "ask", **result}
 
 
@@ -58,7 +58,7 @@ async def query_handouts_stream(query: HandoutsQuery):
     """Newline-delimited JSON events, so the page can show passages at once and the answer as it is written."""
     async def events():
         if wants_answer(query.q, query.mode):
-            async for event in ask(query.q, query.history):
+            async for event in ask(query.q, query.history, quick=query.mode == "quick"):
                 yield json.dumps(event) + "\n"
         else:
             yield json.dumps({"type": "sources", "question": query.q, "rewritten": False, "searches": [],
@@ -188,3 +188,129 @@ async def delete_note(name: str):
         raise HTTPException(404, "No such note")
     ingest.refresh_notes()
     return {"deleted": name}
+
+
+# --- model readiness -----------------------------------------------------------------------------
+
+@router.get("/handouts/model")
+async def model_status():
+    return model.status()
+
+
+@router.post("/handouts/model/load")
+async def load_model():
+    return {"started": model.load()}
+
+
+# --- improvement loop ----------------------------------------------------------------------------
+
+class QuestionIn(BaseModel):
+    q: str
+    expect: list[str] = []
+    history: list[str] = []
+    answer_should_say: Optional[str] = None
+    note: Optional[str] = None
+
+
+class MarkIn(BaseModel):
+    mark: Optional[str] = None
+    note: Optional[str] = None
+
+
+class RunIn(BaseModel):
+    only: list[int] = []
+
+
+class NoteSavedIn(BaseModel):
+    file: str
+
+
+@router.get("/handouts/eval/questions")
+async def list_questions():
+    return {"questions": improve.questions()}
+
+
+@router.post("/handouts/eval/questions")
+async def add_question(question: QuestionIn):
+    try:
+        return {"questions": improve.add_question(question.model_dump())}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+
+
+@router.put("/handouts/eval/questions/{index}")
+async def edit_question(index: int, question: QuestionIn):
+    try:
+        return {"questions": improve.update_question(index, question.model_dump())}
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except IndexError:
+        raise HTTPException(404, "No such question")
+
+
+@router.delete("/handouts/eval/questions/{index}")
+async def delete_question(index: int):
+    try:
+        return {"questions": improve.delete_question(index)}
+    except IndexError:
+        raise HTTPException(404, "No such question")
+
+
+@router.get("/handouts/eval/runs")
+async def list_runs():
+    return {"runs": improve.list_runs(), "running": improve.is_running()}
+
+
+@router.post("/handouts/eval/runs")
+async def start_run(body: RunIn):
+    run_id = improve.start_run(body.only or None)
+    if run_id is None:
+        return {"started": False, "reason": "a test run is already going"}
+    return {"started": True, "id": run_id}
+
+
+def _run_or_404(run_id: str) -> dict:
+    try:
+        return improve.load_run(run_id)
+    except (ValueError, FileNotFoundError):
+        raise HTTPException(404, "No such run")
+
+
+@router.get("/handouts/eval/runs/{run_id}")
+async def get_run(run_id: str):
+    run = _run_or_404(run_id)
+    return {**run, "summary": improve.summary(run)}
+
+
+@router.put("/handouts/eval/runs/{run_id}/items/{n}")
+async def mark_item(run_id: str, n: int, body: MarkIn):
+    _run_or_404(run_id)
+    try:
+        return improve.mark(run_id, n, body.mark, body.note)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except IndexError:
+        raise HTTPException(404, "No such question in this run")
+
+
+@router.post("/handouts/eval/runs/{run_id}/items/{n}/draft-note")
+async def draft_note(run_id: str, n: int):
+    _run_or_404(run_id)
+    try:
+        return await improve.draft_note(run_id, n)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except IndexError:
+        raise HTTPException(404, "No such question in this run")
+
+
+@router.post("/handouts/eval/runs/{run_id}/items/{n}/note-saved")
+async def note_saved(run_id: str, n: int, body: NoteSavedIn):
+    _run_or_404(run_id)
+    improve.note_saved(run_id, n, body.file)
+    return {"ok": True}
+
+
+@router.get("/handouts/eval/search-check")
+async def search_check():
+    return improve.search_check()

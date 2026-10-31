@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { useQuery, useQueryClient } from 'react-query';
 import axios from 'axios';
-import { Search, MessageCircle, BookOpen, RefreshCw, Sparkles, ExternalLink, Layers, StickyNote } from 'lucide-react';
+import { Search, MessageCircle, BookOpen, RefreshCw, Sparkles, ExternalLink, Layers, StickyNote, Zap, GraduationCap } from 'lucide-react';
+import { ImprovePanel } from '../components/HandoutsImprove';
 import { EntityCard, EntityCardById, EntityCardData, KnowledgeBrowse } from '../components/HandoutsKnowledge';
 import { NoteDraft, NoteEditor, NotesList } from '../components/HandoutsNotes';
+import { renderAnswer } from '../components/AnswerText';
 import '../styles/Pages.css';
 
-type Mode = 'auto' | 'search' | 'ask';
+type Mode = 'auto' | 'search' | 'quick' | 'ask';
 
 interface Passage {
   chunk_id: number;
@@ -40,7 +42,8 @@ const card = { background: 'white', padding: '1.5rem', borderRadius: '8px', boxS
 const MODES: { id: Mode; label: string; icon: React.ReactNode }[] = [
   { id: 'auto', label: 'Auto', icon: <Sparkles size={18} /> },
   { id: 'search', label: 'Search', icon: <Search size={18} /> },
-  { id: 'ask', label: 'Ask (AI)', icon: <MessageCircle size={18} /> },
+  { id: 'quick', label: 'Quick answer', icon: <Zap size={18} /> },
+  { id: 'ask', label: 'Full answer', icon: <MessageCircle size={18} /> },
 ];
 
 const COMMON = new Set(['and', 'the', 'what', 'which', 'does', 'how', 'why', 'who', 'when', 'where', 'class', 'with',
@@ -56,38 +59,6 @@ function highlight(text: string, query: string) {
   );
 }
 
-// Inline answer text: **bold**, and [3] as a link that scrolls to passage 3.
-function inline(text: string, key: string) {
-  return text.split(/(\*\*[^*]+\*\*|\[\d+\])/g).map((part, i) => {
-    const cite = part.match(/^\[(\d+)\]$/);
-    if (cite) {
-      return <a key={`${key}-${i}`} href={`#passage-${cite[1]}`} style={{ color: '#667eea', fontWeight: 600, textDecoration: 'none' }}>{part}</a>;
-    }
-    if (part.startsWith('**') && part.endsWith('**') && part.length > 4) return <strong key={`${key}-${i}`}>{part.slice(2, -2)}</strong>;
-    return part;
-  });
-}
-
-// The small amount of Markdown Qwen writes: headings, bullet and numbered lines, paragraphs.
-function renderAnswer(answer: string) {
-  return answer.split('\n').map((line, i) => {
-    const key = String(i);
-    const heading = line.match(/^#{1,6}\s+(.*)/);
-    if (heading) return <h4 key={key} style={{ margin: '1rem 0 0.25rem', color: '#333' }}>{inline(heading[1], key)}</h4>;
-    const bullet = line.match(/^\s*([-*•]|\d+[.)])\s+(.*)/);
-    if (bullet) {
-      return (
-        <div key={key} style={{ display: 'flex', gap: '0.5rem', margin: '0.2rem 0 0.2rem 0.5rem' }}>
-          <span style={{ color: '#667eea' }}>{/\d/.test(bullet[1]) ? bullet[1] : '•'}</span>
-          <span>{inline(bullet[2], key)}</span>
-        </div>
-      );
-    }
-    if (!line.trim()) return <div key={key} style={{ height: '0.5rem' }} />;
-    return <p key={key} style={{ margin: '0.25rem 0' }}>{inline(line, key)}</p>;
-  });
-}
-
 export default function Handouts() {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<Mode>('auto');
@@ -97,7 +68,8 @@ export default function Handouts() {
   const [phase, setPhase] = useState<Phase>(null);
   const loading = phase !== null;
   const [error, setError] = useState('');
-  const [view, setView] = useState<'ask' | 'browse' | 'notes'>('ask');
+  const [view, setView] = useState<'ask' | 'browse' | 'notes' | 'improve'>('ask');
+  const [addedQuestion, setAddedQuestion] = useState('');
   const [noteDraft, setNoteDraft] = useState<NoteDraft | null>(null);
   const [noteSaved, setNoteSaved] = useState('');
   const [openCard, setOpenCard] = useState<number | null>(null);
@@ -165,6 +137,20 @@ export default function Handouts() {
     entities: result.cards.map(c => c.name), corrects: null });
   const citedHandouts = result ? Array.from(new Set(result.passages.filter(p => p.source_kind !== 'note').map(p => p.title))) : [];
 
+  const { data: modelStatus } = useQuery('handouts-model',
+    () => axios.get('/api/handouts/model').then(r => r.data).catch(() => null),
+    { refetchInterval: (d: any) => (d?.loading ? 4000 : 60000) });
+  const loadModel = async () => {
+    await axios.post('/api/handouts/model/load').catch(() => null);
+    setTimeout(() => queryClient.invalidateQueries('handouts-model'), 1000);
+  };
+  const addToTests = async () => {
+    if (!result) return;
+    const previous = history.length > 1 && result.rewritten ? [history[history.length - 2].q] : [];
+    await axios.post('/api/handouts/eval/questions', { q: result.query, history: previous }).catch(() => null);
+    setAddedQuestion(result.query);
+  };
+
   const buildMap = async () => {
     await axios.post('/api/handouts/knowledge/run').catch(() => null);
     setTimeout(() => queryClient.invalidateQueries('handouts-status'), 1000);
@@ -201,6 +187,20 @@ export default function Handouts() {
             <RefreshCw size={14} /> Rescan
           </button>
         </p>
+        {modelStatus && !(modelStatus.qwen && modelStatus.embedder) && (
+          <p style={{ margin: '0.5rem 0 0', padding: '0.5rem 0.75rem', background: '#fff8e6', borderRadius: '6px', color: '#8a6000',
+            fontSize: '0.9rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+            {!modelStatus.lm_studio
+              ? 'LM Studio is not running, so answers and meaning-search are off. Start LM Studio, then load the models.'
+              : `${!modelStatus.qwen ? 'Qwen is not loaded: the first answer would be slow and may be cut short.' : ''} ${!modelStatus.embedder ? 'The embedding model is not loaded: search uses keywords only.' : ''}`}
+            {modelStatus.loading
+              ? <span>Loading… (about a minute)</span>
+              : <button onClick={loadModel}
+                  style={{ padding: '0.25rem 0.7rem', background: '#8a6000', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer' }}>
+                  Load models
+                </button>}
+          </p>
+        )}
         {status?.knowledge && (
           <p style={{ color: '#999', margin: '0.25rem 0 0', fontSize: '0.85rem', display: 'flex', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
             Knowledge map: {status.knowledge.entities} entries • {status.knowledge.facts} facts
@@ -232,11 +232,20 @@ export default function Handouts() {
           </button>
         ))}
         <button
+          onClick={() => setView('improve')}
+          title="Test questions, marking and notes from corrections"
+          style={{ padding: '0.6rem 1.25rem', background: view === 'improve' ? '#667eea' : '#f0f0f0',
+            color: view === 'improve' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer',
+            fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}
+        >
+          <GraduationCap size={18} /> Improve
+        </button>
+        <button
           onClick={() => setView('notes')}
           title="Your teacher notes"
           style={{ padding: '0.6rem 1.25rem', background: view === 'notes' ? '#2e8b57' : '#f0f0f0',
             color: view === 'notes' ? 'white' : '#333', border: 'none', borderRadius: '6px', cursor: 'pointer',
-            fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem', marginLeft: 'auto' }}
+            fontWeight: 500, display: 'flex', alignItems: 'center', gap: '0.5rem' }}
         >
           <StickyNote size={18} /> Notes
         </button>
@@ -251,7 +260,7 @@ export default function Handouts() {
         </button>
       </div>
 
-      {view === 'notes' ? <NotesList /> : view === 'browse' ? <KnowledgeBrowse onAddNote={noteForCard} /> : (<>
+      {view === 'improve' ? <ImprovePanel /> : view === 'notes' ? <NotesList /> : view === 'browse' ? <KnowledgeBrowse onAddNote={noteForCard} /> : (<>
 
       <div style={{ ...card, marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
@@ -323,6 +332,15 @@ export default function Handouts() {
                 display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
               <StickyNote size={14} /> Add a note: correct or add to this answer
             </button>
+          )}
+          {!loading && result.answer && (
+            addedQuestion === result.query
+              ? <p style={{ margin: '0.5rem 0 0', color: '#667eea', fontSize: '0.9rem' }}>Added to your test questions (Improve tab).</p>
+              : <button onClick={addToTests}
+                  style={{ marginTop: '0.5rem', background: 'none', border: 'none', color: '#667eea', cursor: 'pointer', padding: 0,
+                    display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                  <GraduationCap size={14} /> Add this question to my test questions
+                </button>
           )}
         </div>
       )}

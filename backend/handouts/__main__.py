@@ -1,69 +1,26 @@
 """CLI: python -m handouts ingest [--dry-run] [--full] | status | extract-knowledge | apply-knowledge | eval [--answers]"""
 import argparse
-import asyncio
 import json
-import time
-from datetime import datetime
 
-import yaml
-
-from handouts import kb_dir, store
-from handouts.answer import ask_once
-from handouts import knowledge
+from handouts import improve, knowledge, store
 from handouts.ingest import db_path, run
-from handouts.retrieve import search
-
-
-def load_questions() -> list[dict]:
-    return yaml.safe_load((kb_dir() / "eval" / "questions.yaml").read_text()) or []
 
 
 def evaluate() -> None:
-    questions = load_questions()
-    hits = 0
-    for item in questions:
-        query = " ".join([*item.get("history", []), item["q"]])
-        # Handout passages only: answers add matching teacher notes on top of these, not in their place.
-        found = [p["family"] for p in search(query, limit=10) if p["source_kind"] == "handout"][:5]
-        expected = {f.lower() for f in item["expect"]}
-        hit = bool(expected & set(found))
-        hits += hit
-        print(f"{'HIT ' if hit else 'MISS'}  {item['q']}\n      found: {', '.join(dict.fromkeys(found))}")
-    print(f"\n{hits}/{len(questions)} questions found an expected handout in the top 5")
+    result = improve.search_check()
+    for r in result["questions"]:
+        print(f"{'HIT ' if r['hit'] else 'MISS'}  {r['q']}\n      found: {', '.join(r['found'])}")
+    print(f"\n{result['hits']}/{result['total']} questions found an expected handout in the top 5")
     conn = store.connect(db_path())
-    conn.execute("insert into eval_runs(ran_at, hits, total) values (?,?,?)", (store._now(), hits, len(questions)))
+    conn.execute("insert into eval_runs(ran_at, hits, total) values (?,?,?)", (store._now(), result["hits"], result["total"]))
     conn.commit()
 
 
 def evaluate_answers() -> None:
-    """Runs every question through Ask and writes a marking sheet for Daniel into the data folder."""
-    answers: dict[str, str] = {}
-    lines = [f"# Handouts answers to mark, {datetime.now():%Y-%m-%d %H:%M}", "",
-             "For each answer, tick one box and add a note if it is wrong or missing something.", ""]
-    for n, item in enumerate(load_questions(), 1):
-        history = [{"q": h, "answer": answers.get(h, "")} for h in item.get("history", [])]
-        start = time.time()
-        result = asyncio.run(ask_once(item["q"], history))
-        seconds = time.time() - start
-        answers[item["q"]] = result["answer"] or ""
-        print(f"{n:2}. {seconds:4.0f}s  {item['q']}")
-        sources = "; ".join(f"[{i}] {p['title']} — {p['heading_path'] or 'opening section'}"
-                            for i, p in enumerate(result["passages"], 1))
-        lines += [f"## {n}. {item['q']}", ""]
-        if result["standalone"] != item["q"]:
-            lines += [f"*Understood as:* {result['standalone']}", ""]
-        if result["searches"]:
-            lines += [f"*Searched for:* {' · '.join(result['searches'])}", ""]
-        if item.get("answer_should_say"):
-            lines += [f"*Should say:* {item['answer_should_say']}", ""]
-        body = result["answer_error"] or result["answer"] or "(no answer)"
-        if result["fallback"]:
-            body = "(hidden on the page: too few citations)\n\n" + body
-        lines += [f"*{seconds:.0f} seconds*", "", body, "", f"<sub>Sources: {sources}</sub>", "",
-                  "- [ ] Right  - [ ] Partly right  - [ ] Wrong", "", "Note:", "", "---", ""]
-    out = kb_dir() / "eval" / f"answers-{datetime.now():%Y%m%d-%H%M}.md"
-    out.write_text("\n".join(lines))
-    print(f"\nMarking sheet: {out}")
+    """Asks every test question; the run is marked in the Improve tab on the Handouts page."""
+    run = improve.answer_all(improve.new_run())
+    s = improve.summary(run)
+    print(f"\nRun {run['id']}: {s['answered']} answers, about {s['average_seconds']} s each. Mark it in the Improve tab.")
 
 
 def main() -> None:
@@ -78,7 +35,7 @@ def main() -> None:
     km.add_argument("--concurrency", type=int, default=4, help="sections read at once (LM Studio parallel slots)")
     sub.add_parser("apply-knowledge", help="rebuild entities and facts from the cached readings")
     ev = sub.add_parser("eval", help="run the questions in eval/questions.yaml")
-    ev.add_argument("--answers", action="store_true", help="also ask Qwen and write a marking sheet")
+    ev.add_argument("--answers", action="store_true", help="ask Qwen every question; mark the run in the Improve tab")
     args = parser.parse_args()
 
     if args.command == "ingest":
