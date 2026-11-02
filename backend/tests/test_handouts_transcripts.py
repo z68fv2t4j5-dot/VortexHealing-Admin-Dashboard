@@ -100,6 +100,9 @@ def test_transcript_files_are_served_and_guarded(kb, tmp_path, monkeypatch):  # 
     c = client()
     r = c.get(f"/api/handouts/file/{doc['id']}")
     assert r.status_code == 200 and "Compost heaps" in r.text
+    # Deleted after the last scan: the stale row answers 404, not a server error.
+    (folder / "talk.md").unlink()
+    assert c.get(f"/api/handouts/file/{doc['id']}").status_code == 404
     assert transcripts.file_path("../kb/kb.sqlite") is None
     assert transcripts.file_path("missing.md") is None
 
