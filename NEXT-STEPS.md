@@ -2,10 +2,11 @@
 
 Rewritten at every `harness-close`. Assume the next session knows nothing that is not written here. Read this after `docs/memory/MEMORY.md` and `docs/ARCHITECTURE.md`. Plans in `docs/plans/` are dated snapshots of intent; this file is the current state. If they disagree, this file is right.
 
-## What is true now (measured 2026-10-23)
+## What is true now (measured 2026-11-02)
 
-- Backend suite: 151 tests (email campaign API, class rules, reminders, handouts), run by `cd backend && python -m pytest`.
+- Backend suite: 157 tests (email campaign API, class rules, reminders, handouts, transcripts), run by `cd backend && python -m pytest`.
 - Handouts knowledge base, story 1 of `docs/plans/PLAN-handouts-knowledge-base-2610212112.md` (ADR-0008): `backend/handouts/` keeps one current file per handout (74 indexed, 16 older versions retired, 1 identical duplicate skipped), splits them into 1,691 sections and 2,358 passages, and searches by keywords plus nomic embeddings. Index, glossary, notes and eval questions live in `HANDOUTS_KB_DIR` (`~/Documents/Handouts-KB`), outside the repository. Daniel's 21 eval questions: 21/21 find an expected handout in the top 5.
+- Class transcripts (branch feat/transcripts-kb, 2026-11-02): `TRANSCRIPTS_DIR` (set on this Mac to the local transcripts folder) is indexed by every scan as `source_kind='transcript'` — 562 transcripts, ~10.7k passages; searched only through the Search mode's source selector (Handouts & notes / Class transcripts / Everything), never used in answers, so the tuned eval is untouched; folders starting with `_` and `zoom-import` are never indexed. Plan: `docs/plans/PLAN-transcripts-in-kb-2611021110.md`.
 - Handouts page: one box with Auto / Search / Ask; Rescan picks up new or revised handouts. A full index build takes about 30 seconds; the startup scan skips unchanged files.
 - Handouts story 2 (answers): follow-ups are rewritten and multi-part questions split (Qwen, thinking off), Qwen answers with low thinking and `[n]` citations, under-cited answers are withheld, and the page streams: passages in about 1 s, a simple answer done in about 15-25 s, a multi-part one in about 45 s. `python -m handouts eval --answers` writes a marking sheet to `HANDOUTS_KB_DIR/eval/`.
 - Class prerequisites come from the flowchart in `backend/app/class_rules.py`; completed classes come from full-word class tags (ADR-0006). APAC Wizards count as having done Foundational.
@@ -28,7 +29,7 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 - Model readiness: the Handouts page warns when Qwen or the embedder is not loaded and offers "Load models". On Daniel's Mac a login item loads both at login: `~/Library/LaunchAgents/com.vortexhealing.load-models.plist` runs `~/Library/Application Support/VortexHealing/load-models.sh` (log `~/Library/Logs/vortexhealing-load-models.log`). To remove it: `launchctl bootout gui/$(id -u)/com.vortexhealing.load-models` and delete those two files.
 - Daniel is checking `~/Documents/Handouts-KB/handout_classes.yaml` (which class each handout belongs to; Sensing Review is set to Sensing I).
 - Daniel now marks runs in the Improve tab himself and saves notes from his corrections; Claude is needed only when answers miss things the handouts do say (a retrieval or prompt fix).
-- Ideas Daniel deferred: answer feedback (thumbs) to grow the eval set, audio transcription (the EarthWorks recordings), class-gated access for students. `~/Documents/Handouts-KB/QWEN-PROMPTS.md` is out of date: Qwen could not finish story 1, and stories 1-4 were built by Claude.
+- Ideas Daniel deferred: answer feedback (thumbs) to grow the eval set, audio transcription of remaining recordings (the class transcripts themselves are now searchable), class-gated access for students. `~/Documents/Handouts-KB/QWEN-PROMPTS.md` is out of date: Qwen could not finish story 1, and stories 1-4 were built by Claude.
 - The Tasks page's AI call (`backend/app/api/ai_tasks.py`) names its model `"qwen"`; use `settings.QWEN_MODEL` or LM Studio may load a second copy.
 - Classes page shows wrong prerequisites: `backend/seed_classes.py` predates the flowchart; regenerate its `prerequisites` from `class_rules.py` (back up the database before reseeding).
 - Email delivery: approving a reminder or campaign only records it. Decide the sending account; the approval step stays.
@@ -48,4 +49,4 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 
 ## Kickoff text (paste into the next session)
 
-> Read NEXT-STEPS.md in full, then AGENTS.md, then docs/memory/MEMORY.md, then docs/ARCHITECTURE.md. Run harness-open. Then: ask Daniel for his marks on the latest answer sheet in `~/Documents/Handouts-KB/eval/`, and whether to plan real email delivery next or improve the handouts from his marks.
+> Read NEXT-STEPS.md in full, then AGENTS.md, then docs/memory/MEMORY.md, then docs/ARCHITECTURE.md. Run harness-open. Then: check whether feat/transcripts-kb was merged (PR for class transcripts in the KB); ideas waiting: transcript-aware answers (guarded by the eval), real email delivery, Daniel's marks in the Improve tab.

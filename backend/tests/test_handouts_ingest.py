@@ -24,6 +24,8 @@ def kb(tmp_path, monkeypatch):
     src.mkdir()
     monkeypatch.setattr(settings, "HANDOUTS_DIR", str(src))
     monkeypatch.setattr(settings, "HANDOUTS_KB_DIR", str(data))
+    # The machine's real transcripts folder must never leak into a test scan.
+    monkeypatch.setattr(settings, "TRANSCRIPTS_DIR", None)
     monkeypatch.setattr(ingest, "extract_text", lambda p: p.read_text())
     monkeypatch.setattr(ingest, "embed", fake_embed)
     monkeypatch.setattr(retrieve, "embed", fake_embed)

@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
     HANDOUTS_DIR: Optional[str] = None
     HANDOUTS_KB_DIR: str = "~/Documents/Handouts-KB"
+    TRANSCRIPTS_DIR: Optional[str] = None
 
     class Config:
         env_file = ".env"
