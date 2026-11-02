@@ -24,22 +24,28 @@ STOPWORDS = {"a", "an", "and", "are", "as", "at", "be", "can", "do", "does", "fo
              "i", "in", "is", "it", "of", "on", "or", "should", "that", "the", "this", "to", "used", "what",
              "whats", "when", "where", "which", "who", "why", "with", "you", "your"}
 
+# Transcripts are spoken, unedited and far more numerous than the handouts, so they never enter a
+# search unless asked for: the default kinds keep today's tuned handout-and-note behaviour.
+DEFAULT_KINDS = frozenset({"handout", "note"})
+
 _vectors: dict = {}  # cache of (index_version) -> (chunk ids, matrix)
 
 
-def search(query: str, limit: int = 10, conn: Optional[sqlite3.Connection] = None) -> list[dict]:
+def search(query: str, limit: int = 10, conn: Optional[sqlite3.Connection] = None,
+           kinds: Optional[set] = None) -> list[dict]:
     from handouts.ingest import db_path
 
+    kinds = frozenset(kinds) if kinds else DEFAULT_KINDS
     own = conn is None
     conn = conn or store.connect(db_path())
     try:
         expanded = expand(query, glossary(conn))
-        ranked = [_keyword(conn, expanded)]
-        if (semantic := _semantic(conn, expanded)) is not None:
+        ranked = [_keyword(conn, expanded, kinds)]
+        if (semantic := _semantic(conn, expanded, kinds)) is not None:
             ranked.append(semantic)
         fused = fuse(ranked)
         boost_notes(conn, fused, ranked)
-        return _passages(conn, sorted(fused, key=fused.get, reverse=True), fused, limit)
+        return _passages(conn, sorted(fused, key=fused.get, reverse=True), fused, limit, kinds)
     finally:
         if own:
             conn.close()
@@ -93,22 +99,26 @@ def expand(query: str, gloss: dict[str, list[str]]) -> str:
     return " ".join([query, *extra])
 
 
-def _keyword(conn, query: str) -> list[int]:
+def _keyword(conn, query: str, kinds: frozenset = DEFAULT_KINDS) -> list[int]:
     terms = [t for t in re.findall(r"\w+", query.lower()) if t not in STOPWORDS and len(t) > 1]
     if not terms:
         return []
     match = " OR ".join(f'"{t}"' for t in dict.fromkeys(terms))
+    marks = ",".join("?" * len(kinds))
     rows = conn.execute(
         "select f.rowid from chunks_fts f join chunks c on c.id = f.rowid join documents d on d.id = c.document_id"
-        " where chunks_fts match ? and d.status = 'KEEP' order by bm25(chunks_fts, 1.0, 2.0, 1.5) limit ?",
-        (match, CANDIDATES)).fetchall()
+        f" where chunks_fts match ? and d.status = 'KEEP' and d.source_kind in ({marks})"
+        " order by bm25(chunks_fts, 1.0, 2.0, 1.5) limit ?",
+        (match, *sorted(kinds), CANDIDATES)).fetchall()
     return [r[0] for r in rows]
 
 
-def _semantic(conn, query: str) -> Optional[list[int]]:
+def _semantic(conn, query: str, kinds: frozenset = DEFAULT_KINDS) -> Optional[list[int]]:
     version = store.get_meta(conn, "index_version")
     if _vectors.get("version") != version:
-        _vectors.update(version=version, data=store.load_embeddings(conn))
+        _vectors.update(version=version, data=store.load_embeddings(conn),
+                        kind={r["id"]: r["source_kind"] for r in conn.execute(
+                            "select c.id, d.source_kind from chunks c join documents d on d.id = c.document_id")})
     ids, matrix = _vectors["data"]
     if matrix is None:
         return None
@@ -116,18 +126,27 @@ def _semantic(conn, query: str) -> Optional[list[int]]:
     if q is None:
         return None
     scores = matrix @ q[0]
-    top = np.argsort(-scores)[:CANDIDATES]
-    return [ids[i] for i in top]
+    # Rank only chunks of the wanted kinds: thousands of transcript chunks must not
+    # crowd handouts out of the candidate list when they are filtered away later.
+    kind = _vectors["kind"]
+    out = []
+    for i in np.argsort(-scores):
+        if kind.get(ids[i]) in kinds:
+            out.append(ids[i])
+            if len(out) >= CANDIDATES:
+                break
+    return out
 
 
-def _passages(conn, chunk_ids: list[int], scores: dict[int, float], limit: int) -> list[dict]:
+def _passages(conn, chunk_ids: list[int], scores: dict[int, float], limit: int,
+              kinds: frozenset = DEFAULT_KINDS) -> list[dict]:
     out, per_doc = [], {}
     for cid in chunk_ids:
         row = conn.execute(
             "select c.id, c.text, s.heading_path, d.id doc_id, d.title, d.family, d.version, d.path, d.doc_date, d.source_kind"
             " from chunks c join sections s on s.id = c.section_id join documents d on d.id = c.document_id"
             " where c.id = ? and d.status = 'KEEP'", (cid,)).fetchone()
-        if row is None or per_doc.get(row["doc_id"], 0) >= PER_DOCUMENT:
+        if row is None or row["source_kind"] not in kinds or per_doc.get(row["doc_id"], 0) >= PER_DOCUMENT:
             continue
         per_doc[row["doc_id"]] = per_doc.get(row["doc_id"], 0) + 1
         out.append({"chunk_id": row["id"], "text": row["text"], "heading_path": row["heading_path"],

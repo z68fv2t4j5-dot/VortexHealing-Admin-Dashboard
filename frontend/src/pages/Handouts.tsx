@@ -19,7 +19,7 @@ interface Passage {
   version: string;
   path: string;
   doc_date: string | null;
-  source_kind: 'handout' | 'note';
+  source_kind: 'handout' | 'note' | 'transcript';
 }
 
 interface QueryResult {
@@ -46,6 +46,14 @@ const MODES: { id: Mode; label: string; icon: React.ReactNode }[] = [
   { id: 'ask', label: 'Full answer', icon: <MessageCircle size={18} /> },
 ];
 
+// Search-mode source filter. Transcripts are spoken and plentiful, so they stay out unless chosen;
+// answers (ask mode) always use handouts and notes only.
+const SOURCES: { id: string; label: string; kinds: string[] }[] = [
+  { id: 'default', label: 'Handouts & notes', kinds: [] },
+  { id: 'transcripts', label: 'Class transcripts', kinds: ['transcript'] },
+  { id: 'everything', label: 'Everything', kinds: ['handout', 'note', 'transcript'] },
+];
+
 const COMMON = new Set(['and', 'the', 'what', 'which', 'does', 'how', 'why', 'who', 'when', 'where', 'class', 'with',
   'for', 'from', 'that', 'this', 'are', 'can', 'you', 'our', 'into', 'its', 'whats', 'should', 'used', 'get']);
 
@@ -62,6 +70,7 @@ function highlight(text: string, query: string) {
 export default function Handouts() {
   const queryClient = useQueryClient();
   const [mode, setMode] = useState<Mode>('auto');
+  const [sourceSet, setSourceSet] = useState('default');
   const [text, setText] = useState('');
   const [result, setResult] = useState<QueryResult | null>(null);
   const [history, setHistory] = useState<{ q: string; answer: string }[]>([]);
@@ -95,7 +104,8 @@ export default function Handouts() {
       const response = await fetch('/api/handouts/query/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ q, mode, history: history.slice(-3) }),
+        body: JSON.stringify({ q, mode, history: history.slice(-3),
+          sources: mode === 'search' ? (SOURCES.find(s => s.id === sourceSet) || SOURCES[0]).kinds : [] }),
       });
       if (!response.ok || !response.body) throw new Error(String(response.status));
       const reader = response.body.getReader();
@@ -171,7 +181,7 @@ export default function Handouts() {
           {status?.configured === false
             ? 'HANDOUTS_DIR is not set in backend/.env'
             : status
-              ? `${status.documents} handouts • ${status.chunks} passages • ${status.retired} older versions retired`
+              ? `${status.documents} handouts • ${status.chunks} passages • ${status.retired} older versions retired${status.transcripts ? ` • ${status.transcripts} class transcripts` : ''}`
               : 'Index status unavailable'}
           {status?.scanning && <span style={{ color: '#667eea' }}>Scanning…</span>}
           {status?.last_scan && !status.scanning && (
@@ -273,6 +283,13 @@ export default function Handouts() {
             style={{ flex: 1, padding: '0.75rem 1rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '1rem' }}
             disabled={loading}
           />
+          {(status?.transcripts ?? 0) > 0 && mode === 'search' && (
+            <select value={sourceSet} onChange={e => setSourceSet(e.target.value)} disabled={loading}
+              title="Where to search; answers always use handouts and notes only"
+              style={{ padding: '0.75rem 0.5rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.9rem', color: '#333' }}>
+              {SOURCES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          )}
           <button
             onClick={run}
             disabled={!text.trim() || loading}
@@ -349,21 +366,24 @@ export default function Handouts() {
         <div style={{ display: 'grid', gap: '1rem' }}>
           {result.passages.map((p, i) => (
             <div id={`passage-${i + 1}`} key={p.chunk_id}
-              style={{ ...card, borderLeft: `4px solid ${p.source_kind === 'note' ? '#2e8b57' : '#667eea'}`,
-                background: p.source_kind === 'note' ? '#f6fbf8' : 'white' }}>
+              style={{ ...card,
+                borderLeft: `4px solid ${p.source_kind === 'note' ? '#2e8b57' : p.source_kind === 'transcript' ? '#b8860b' : '#667eea'}`,
+                background: p.source_kind === 'note' ? '#f6fbf8' : p.source_kind === 'transcript' ? '#fdfaf2' : 'white' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'baseline' }}>
                 <h3 style={{ margin: '0 0 0.35rem 0', color: '#333', fontSize: '1.05rem' }}>
                   <span style={{ color: '#667eea' }}>[{i + 1}]</span> {p.title}
                 </h3>
                 {p.source_kind !== 'note' && <a href={`/api/handouts/file/${p.document_id}`} target="_blank" rel="noreferrer"
                   style={{ display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.85rem', color: '#667eea', whiteSpace: 'nowrap' }}>
-                  Open handout <ExternalLink size={14} />
+                  {p.source_kind === 'transcript' ? 'Open transcript' : 'Open handout'} <ExternalLink size={14} />
                 </a>}
               </div>
               <p style={{ margin: '0 0 0.75rem 0', fontSize: '0.85rem', color: '#666' }}>
-                {p.source_kind === 'note' ? `Your note${p.doc_date ? `, ${p.doc_date}` : ''}` : p.heading_path || 'Opening section'}
+                {p.source_kind === 'note' ? `Your note${p.doc_date ? `, ${p.doc_date}` : ''}`
+                  : p.source_kind === 'transcript' ? `Class transcript${p.doc_date ? `, ${p.doc_date}` : ''}`
+                  : p.heading_path || 'Opening section'}
                 {p.version && ` • version ${p.version}`}
-                {p.doc_date && p.source_kind !== 'note' && ` • ${p.doc_date}`}
+                {p.doc_date && p.source_kind === 'handout' && ` • ${p.doc_date}`}
               </p>
               <p style={{ margin: 0, color: '#555', lineHeight: 1.55 }}>{highlight(p.text, result.query)}</p>
             </div>

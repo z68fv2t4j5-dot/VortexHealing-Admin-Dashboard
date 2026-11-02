@@ -147,6 +147,7 @@ def counts(conn) -> dict:
         "chunks_without_embeddings": one("select count(*) from chunks c join documents d on d.id = c.document_id"
                                          " where d.status = 'KEEP' and c.embedding is null"),
         "notes": one("select count(*) from documents where status = 'KEEP' and source_kind = 'note'"),
+        "transcripts": one("select count(*) from documents where status = 'KEEP' and source_kind = 'transcript'"),
     }
 
 

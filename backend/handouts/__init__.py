@@ -18,3 +18,10 @@ def kb_dir() -> Path:
     from app.core.config import settings
 
     return Path(settings.HANDOUTS_KB_DIR).expanduser()
+
+
+def transcripts_dir() -> "Path | None":
+    """Folder of class-transcript Markdown files, or None when not configured."""
+    from app.core.config import settings
+
+    return Path(settings.TRANSCRIPTS_DIR).expanduser() if settings.TRANSCRIPTS_DIR else None

@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.core.config import settings
-from handouts import improve, ingest, knowledge, model, notes, source_dir, store
+from handouts import improve, ingest, knowledge, model, notes, source_dir, store, transcripts
 from handouts.answer import ask, ask_once, trim
 from handouts.retrieve import search
 
@@ -20,6 +20,8 @@ class HandoutsQuery(BaseModel):
     q: str
     mode: str = "auto"
     history: list[dict] = []
+    # Search-mode source filter, e.g. ["transcript"]; empty means the default handouts + notes.
+    sources: list[str] = []
 
 
 class NoteIn(BaseModel):
@@ -47,8 +49,9 @@ def cards_for(text: str) -> list[dict]:
 @router.post("/handouts/query")
 async def query_handouts(query: HandoutsQuery):
     if not wants_answer(query.q, query.mode):
-        return {"query": query.q, "mode": "search", "passages": search(query.q, limit=10), "cards": cards_for(query.q),
-                "answer": None, "answer_error": None}
+        return {"query": query.q, "mode": "search",
+                "passages": search(query.q, limit=10, kinds=set(query.sources) or None),
+                "cards": cards_for(query.q), "answer": None, "answer_error": None}
     result = await ask_once(query.q, query.history, quick=query.mode == "quick")
     return {"query": query.q, "mode": "ask", **result}
 
@@ -62,7 +65,8 @@ async def query_handouts_stream(query: HandoutsQuery):
                 yield json.dumps(event) + "\n"
         else:
             yield json.dumps({"type": "sources", "question": query.q, "rewritten": False, "searches": [],
-                              "passages": search(query.q, limit=10), "cards": cards_for(query.q)}) + "\n"
+                              "passages": search(query.q, limit=10, kinds=set(query.sources) or None),
+                              "cards": cards_for(query.q)}) + "\n"
             yield json.dumps({"type": "done", "answer": None}) + "\n"
     return StreamingResponse(events(), media_type="application/x-ndjson")
 
@@ -141,6 +145,11 @@ async def handout_file(document_id: int):
         if not note.exists():
             raise HTTPException(404, "Note not found")
         return FileResponse(note, media_type="text/markdown; charset=utf-8")
+    if row["path"].startswith("transcripts/"):
+        path = transcripts.file_path(row["path"].removeprefix("transcripts/"))
+        if path is None:
+            raise HTTPException(404, "Transcript not found")
+        return FileResponse(path, media_type="text/markdown; charset=utf-8")
     root = source_dir().resolve()
     path = (root / row["path"]).resolve()
     if root not in path.parents or not path.exists():

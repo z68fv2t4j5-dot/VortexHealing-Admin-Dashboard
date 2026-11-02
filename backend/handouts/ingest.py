@@ -14,7 +14,7 @@ from typing import Callable
 
 import yaml
 
-from handouts import catalog, kb_dir, notes, source_dir, store
+from handouts import catalog, kb_dir, notes, source_dir, store, transcripts
 from handouts.embed import embed
 from handouts.extract import extract_text
 from handouts.sections import chunk, split
@@ -109,12 +109,13 @@ def _run(root: Path, entries, full: bool, out) -> dict:
     conn.commit()
 
     notes_changed = notes.index(conn, out)
+    transcripts_changed = transcripts.index(conn, out)
     embedded = _fill_embeddings(conn, out)
     store.set_meta(conn, "last_scan", store._now())
     store.set_meta(conn, "index_version", store._now())
     conn.commit()
     summary = {"indexed": changed, "unchanged": unchanged, "identical_text": duplicates, "notes_changed": notes_changed,
-               "embedded": embedded,
+               "transcripts_changed": transcripts_changed, "embedded": embedded,
                **store.counts(conn)}
     conn.close()
     out(f"Scan done: {summary}")
