@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     HANDOUTS_DIR: Optional[str] = None
     HANDOUTS_KB_DIR: str = "~/Documents/Handouts-KB"
     TRANSCRIPTS_DIR: Optional[str] = None
+    ZOOM_CREDENTIALS: Optional[str] = None  # JSON file with account_id, client_id, client_secret
+    ZOOM_USER_ID: Optional[str] = None  # the account user whose meetings the report API lists
+    ZOOM_FOLDER: Optional[str] = None  # teacher folder under TRANSCRIPTS_DIR for Zoom transcripts
 
     class Config:
         env_file = ".env"

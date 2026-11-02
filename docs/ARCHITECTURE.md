@@ -19,6 +19,7 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
 | `backend/app/api/` | One router per feature | this map |
 | `backend/handouts/` | Handouts knowledge base: catalogue, extraction, sections, SQLite/FTS5 store, embeddings, ingest, hybrid search; CLI `python -m handouts` | ADR-0008, Handouts flow |
 | `backend/handouts/transcripts.py` | Class transcripts from `TRANSCRIPTS_DIR` indexed as `source_kind='transcript'`; searched only when asked for, never in answers | `docs/plans/PLAN-transcripts-in-kb-2611021110.md` |
+| `backend/transcript_import/` | Fills `TRANSCRIPTS_DIR`: `zoom.py` downloads new Zoom transcripts and files them; CLI `python -m transcript_import zoom [--dry-run]` | ADR-0009, Transcript import flow |
 | `backend/seed_*.py` | Imports students and classes from files outside the repository | AGENTS.md Part B (data) |
 | `backend/tests/` | pytest suite; email campaign API so far | AGENTS.md Part B (test) |
 | `backend/app/class_rules.py` | Flowchart prerequisites as data; completed classes from tags; eligibility; next class | `docs/CLASS_RULES.md`, ADR-0006 |
@@ -46,6 +47,8 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
 5. Reminders: Email page -> `GET /api/reminders/due` (`due_reminders`: each class's 2-month, 1-month and 2-week dates, offered for 7 days, minus approved ones in `class_reminders`; recipients are eligible APAC Wizards who have not done the class) -> person edits and approves -> `POST /api/reminders/approve` -> sent campaign + recipient rows + `class_reminders` row. Files: `backend/app/reminders.py`, `backend/app/api/reminders.py`, `frontend/src/components/RemindersDue.tsx`.
 6. AI features: Chat, Tasks and Handouts call LM Studio at `localhost:1234/v1`; pages must handle it being down. Name the model by its LM Studio identifier (`QWEN_MODEL`, default `qwen/qwen3.8-27b`): a bare name makes LM Studio load a second copy at a small context, which tripled answer time.
    <!-- verify: present 'qwen/qwen3.8-27b' in backend/app/core -->
+7. Transcript import (Zoom): `python -m transcript_import zoom` -> report API lists the account's meeting instances for the last six months (`ZOOM_USER_ID`, token from the `ZOOM_CREDENTIALS` file) -> UUIDs already in `TRANSCRIPTS_DIR/zoom-import/transcripts_manifest.csv` skipped -> `/meetings/{uuid}/transcript` (404 or not downloadable = unavailable) -> `.vtt` staged in `zoom-import/vtt/`, Markdown (one paragraph per speaker turn) named `YYYY-MM-DD HHMM — <topic>` with the UTC start, written to the one non-underscore `ZOOM_FOLDER` subfolder whose files share the topic, else `_inbox/` -> manifest row. The next handouts scan indexes it (`_inbox/` and `zoom-import/` excepted). Files: `backend/transcript_import/zoom.py`.
+   <!-- verify: exists backend/transcript_import/zoom.py -->
 
 ## Boundaries and invariants
 
@@ -53,7 +56,12 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
   <!-- verify: present '^\*\.db$' in .gitignore -->
 - **No handout content inside the repository.** The index, glossary, teacher notes and eval questions live in `HANDOUTS_KB_DIR`; tests use invented text. Bought by: ADR-0008 (the repository is public; handouts are confidential teaching material).
   <!-- verify: absent '/Users/' in backend/handouts -->
-- **No transcript content inside the repository.** Class and healing-session transcripts hold student names and spoken confidences; they live in `TRANSCRIPTS_DIR`, outside the repository, and transcript tests use invented text. Bought by: ADR-0005 (raw transcripts stay local) and the ADR-0008 pattern.
+- **No transcript content inside the repository.** Class and healing-session transcripts hold student names and spoken confidences; they live in `TRANSCRIPTS_DIR`, outside the repository, and transcript tests use invented text. The import code names no folder, account or address; settings do. Bought by: ADR-0005 (raw transcripts stay local), the ADR-0008 pattern and ADR-0009.
+  <!-- verify: absent '/Users/|@gmail|Class-Transcripts' in backend/transcript_import -->
+- **A Zoom transcript is identified by its meeting UUID, never its file name.** The first import saved one transcript under two or three names. Bought by: ADR-0009.
+  <!-- verify: present 'if uuid in have' in backend/transcript_import -->
+- **The app never imports the import code.** `transcript_import` holds API clients and file moves the web backend does not need. Bought by: ADR-0009.
+  <!-- verify: absent 'transcript_import' in backend/app -->
 - **Email send records, it does not deliver.** `/api/email/send` marks the campaign `sent` and writes `email_recipients` rows with status `pending`; no mail transport is wired up yet. Bought by: Phase 1 scope in `docs/EMAIL_CAMPAIGN_PLAN.md`.
   <!-- verify: absent 'smtplib|sendgrid|nodemailer' in backend/app -->
 - **No reminder is recorded without a person's click, and none twice.** There is no background scheduler; `class_reminders` is unique on (class_id, stage). Bought by: ADR-0007.
