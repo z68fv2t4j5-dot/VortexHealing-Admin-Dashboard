@@ -14,3 +14,4 @@ Every file has exactly one row here and ids are sequential (`adr-register`). `AG
 | 0006 | Full-word class tags are the record of completed classes | Accepted | 2026-10-21 |
 | 0007 | Class reminders are worked out on view and approved by a person | Accepted | 2026-10-21 |
 | 0008 | Handouts knowledge base: catalogue, hybrid search, data outside the repository | Accepted | 2026-10-23 |
+| 0009 | Transcript import code lives in this repository; the transcripts stay outside it | Accepted | 2026-11-02 |
