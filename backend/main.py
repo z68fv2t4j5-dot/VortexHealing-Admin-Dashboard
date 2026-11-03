@@ -67,4 +67,5 @@ app.include_router(documents.router, prefix="/api/documents", tags=["documents"]
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="0.0.0.0", port=8001, reload=True)
+    # This Mac only: there is no login, and the page reaches the API through Vite's proxy.
+    uvicorn.run("main:app", host="127.0.0.1", port=8001, reload=True)

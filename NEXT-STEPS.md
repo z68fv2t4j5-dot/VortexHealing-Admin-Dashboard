@@ -4,7 +4,7 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 
 ## What is true now (measured 2026-11-02)
 
-- Backend suite: 167 tests (email campaign API, class rules, reminders, handouts, transcripts, Zoom import), run by `cd backend && python -m pytest`.
+- Backend suite: 168 tests (email campaign API, class rules, reminders, handouts, transcripts, Zoom import, backend bind address), run by `cd backend && python -m pytest`.
 - Zoom import (branch feat/zoom-sync, ADR-0009): `cd backend && python -m transcript_import zoom [--dry-run]` lists the account's meeting instances for the last six months, downloads transcripts whose UUID is not in `TRANSCRIPTS_DIR/zoom-import/transcripts_manifest.csv`, and files them into the `ZOOM_FOLDER` subfolder that already holds the topic, else `_inbox/`. Settings `ZOOM_CREDENTIALS`, `ZOOM_USER_ID`, `ZOOM_FOLDER` are in Daniel's `backend/.env`. First real run 2026-11-02: 178 instances listed, 5 downloaded (2 filed, 3 of a new series in `_inbox/`, which Daniel filed under Classes), 77 already had, 96 unavailable; the rerun downloaded 0.
 - Zoom duplicates resolved 2026-11-02 with Daniel's go: the first import had saved some transcripts under two or three names; 89 byte-identical copies moved to the Zoom folder's `_duplicates/` (not indexed; undo log `_duplicates/moved.csv`), keeping in each set the copy with the earliest stamp (the meeting start; 19 of those kept carry the old five-digit stamp). The Zoom folder now holds 284 distinct transcripts; the index holds 480 transcripts after a rescan.
 - Handouts knowledge base, story 1 of `docs/plans/PLAN-handouts-knowledge-base-2610212112.md` (ADR-0008): `backend/handouts/` keeps one current file per handout (74 indexed, 16 older versions retired, 1 identical duplicate skipped), splits them into 1,691 sections and 2,358 passages, and searches by keywords plus nomic embeddings. Index, glossary, notes and eval questions live in `HANDOUTS_KB_DIR` (`~/Documents/Handouts-KB`), outside the repository. Daniel's 21 eval questions: 21/21 find an expected handout in the top 5.
@@ -13,6 +13,7 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 - Handouts story 2 (answers): follow-ups are rewritten and multi-part questions split (Qwen, thinking off), Qwen answers with low thinking and `[n]` citations, under-cited answers are withheld, and the page streams: passages in about 1 s, a simple answer done in about 15-25 s, a multi-part one in about 45 s. `python -m handouts eval --answers` writes a marking sheet to `HANDOUTS_KB_DIR/eval/`.
 - Class prerequisites come from the flowchart in `backend/app/class_rules.py`; completed classes come from full-word class tags (ADR-0006). APAC Wizards count as having done Foundational.
 - Email page: APAC Wizards list and full-word class tags only; a "Reminders due" panel (ADR-0007). `/api/email/send` records a send; it does not deliver mail.
+- Network (2026-11-03): the backend listens on `127.0.0.1:8001` only; before, it listened on every interface with the Mac's firewall off. To view the dashboard from another machine on the home network: `cd frontend && npm run dev -- --host`, then the Mac's address on port 3000 (`ipconfig getifaddr en0`). No login exists, so that exposes all data to the network while it runs; a login is Daniel's call.
 - Raw agent transcripts stay on this machine (ADR-0005); session logs carry no student names, emails or handout text.
 
 ## Step 0: re-verify before acting on anything above
@@ -55,4 +56,4 @@ Rewritten at every `harness-close`. Assume the next session knows nothing that i
 
 ## Kickoff text (paste into the next session)
 
-> Read NEXT-STEPS.md in full, then AGENTS.md, then docs/memory/MEMORY.md, then docs/ARCHITECTURE.md. Run harness-open. Then: check whether feat/zoom-sync was merged; next work item: the MacWhisper export (`transcript_import/macwhisper.py`). Ideas waiting: transcript-aware answers (guarded by the eval), real email delivery.
+> Read NEXT-STEPS.md in full, then AGENTS.md, then docs/memory/MEMORY.md, then docs/ARCHITECTURE.md. Run harness-open. Then: check whether fix/backend-local-only was merged; next work item: the MacWhisper export (`transcript_import/macwhisper.py`). Ideas waiting: transcript-aware answers (guarded by the eval), real email delivery.

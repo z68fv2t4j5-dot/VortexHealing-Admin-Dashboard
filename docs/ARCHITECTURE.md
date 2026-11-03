@@ -60,6 +60,8 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
   <!-- verify: absent '/Users/|@gmail|Class-Transcripts' in backend/transcript_import -->
 - **A Zoom transcript is identified by its meeting UUID, never its file name.** The first import saved one transcript under two or three names. Bought by: ADR-0009.
   <!-- verify: present 'if uuid in have' in backend/transcript_import -->
+- **Nothing listens on the network by default.** The backend binds `127.0.0.1:8001` and Vite `localhost:3000`; no route sits behind a login, so another machine reaches the dashboard only when someone runs Vite with `--host`, and then the proxy exposes every API with it. Bought by: 2026-11-03, the backend found on every interface with the Mac's firewall off (`docs/plans/PLAN-backend-local-only-2611031221.md`).
+  <!-- verify: absent 'host="0.0.0.0"' in backend -->
 - **The app never imports the import code.** `transcript_import` holds API clients and file moves the web backend does not need. Bought by: ADR-0009.
   <!-- verify: absent 'transcript_import' in backend/app -->
 - **Email send records, it does not deliver.** `/api/email/send` marks the campaign `sent` and writes `email_recipients` rows with status `pending`; no mail transport is wired up yet. Bought by: Phase 1 scope in `docs/EMAIL_CAMPAIGN_PLAN.md`.

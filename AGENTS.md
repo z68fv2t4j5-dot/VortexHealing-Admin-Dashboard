@@ -122,6 +122,10 @@ A rule enters Part A only if it names (a) the value it adds, (b) how it is enfor
 - Pages work on mobile widths as well as desktop.
 - Success criteria: dashboard lists all students, searchable by name or email; Classes shows the schedule; Chat works when LM Studio is running; email campaigns segment by tags and lists; no errors in the browser console; seed scripts complete without errors.
 - Handout text is confidential teaching material: no handout text, index, glossary or eval question enters the repository; handout tests use invented text (ADR-0008). Data lives in `HANDOUTS_KB_DIR`.
+- Never bind the backend or Vite to the network by default: no route has a login. Viewing from another machine on Daniel's network is on demand, `cd frontend && npm run dev -- --host`, and exposes every page and API through the proxy while it runs.
+  <!-- verify: present 'host="127.0.0.1"' in backend -->
+- Tests never import or run `backend/main.py`: CI installs `requirements-test.txt` only, and the routers it mounts need `openai`, `passlib`, `jwt` and `pandas`. Such a test passes locally, where the venv has everything, and fails in CI.
+  <!-- verify: absent 'runpy|from main import' in backend/tests -->
 - A new key in `backend/.env` needs a field on `Settings` in `backend/app/core/config.py` first: pydantic rejects unknown keys and the backend will not start.
   <!-- verify: present 'HANDOUTS_KB_DIR: str' in backend/app/core -->
 
