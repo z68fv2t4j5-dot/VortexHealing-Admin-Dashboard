@@ -1,7 +1,7 @@
 # Plan (bugfix): backend-local-only
 Status: done 2026-11-03 (Daniel: "great idea", "pls do")
 
-Departures: AGENTS.md Part B also carries a verify line (`present 'host="127.0.0.1"' in backend`), so the guard holds from both sides.
+Departures: AGENTS.md Part B also carries a verify line (`present 'host="127.0.0.1"' in backend`), so the guard holds from both sides. The test first ran `main.py` with `uvicorn.run` replaced; CI failed it at import (its test requirements leave out uvicorn and the routers' packages), so it now reads the `uvicorn.run` call from the source, and AGENTS.md Part B records the trap.
 
 ## Why
 
@@ -39,7 +39,7 @@ Daniel asked whether he can view the dashboard from another machine on his netwo
 
 ## Test plan
 
-- Unit, written first: `test_backend_listens_on_this_mac_only` runs `main.py` as `__main__` with `uvicorn.run` replaced, and asserts the host is `127.0.0.1`. Red first against `0.0.0.0`.
+- Unit, written first: `test_backend_listens_on_this_mac_only` asserts the host `main.py` passes to `uvicorn.run` is `127.0.0.1`. Red first against `0.0.0.0`.
 - Claim: an invariant in the map with `verify: absent 'host="0.0.0.0"' in backend`.
 - e2e: restart the backend; `lsof` shows `127.0.0.1:8001`; `curl` to the network address on 8001 is refused; `localhost:8001/health` and `localhost:3000/api/handouts/status` answer.
 
