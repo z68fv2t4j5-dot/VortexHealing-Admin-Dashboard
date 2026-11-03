@@ -73,4 +73,4 @@ Cross-repo impact: none.
 
 ## BACKLOG
 
-- 89 duplicate Zoom transcripts in the teacher folder (the 19 five-digit files among them) double the hits in transcript search. Moving the extra copies to an underscore folder, keeping in each set the copy stamped with the meeting start, is a data change outside the repository, Daniel's call.
+- 89 duplicate Zoom transcripts in the teacher folder (the 19 five-digit files among them) double the hits in transcript search. Moving the extra copies to an underscore folder, keeping in each set the copy stamped with the meeting start, is a data change outside the repository, Daniel's call. Done 2026-11-02 with his go (see the session log).
