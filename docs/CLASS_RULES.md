@@ -67,8 +67,27 @@ Rules:
 - Every reminder is reviewed and approved by a person before it goes out. Nothing sends automatically. Each class and stage can be approved once.
 - Dates are Sydney dates. Months are calendar months; a 31st falls back to the month's last day.
 - For now, reminders and campaigns go to the APAC Wizards list only.
+- The daily digest (section 5, ADR-0010) tells Daniel about an unapproved reminder on its date, 3 days later, and on its last day (7 days after), giving the Amsterdam time it closes: Sydney midnight, 14:00 to 16:00 by season.
 
 ## 4. Student status labels
 
 New Inquiry · Awaiting Prerequisite · Eligible · Enrolled · Confirmed ·
 Attended · Completed · Repeat/Follow-up Needed · On Hold
+
+## 5. Admin task timing
+
+From Daniel, 2026-11-04. Every class in the schedule gets these four tasks (all classes are his):
+
+| Task | Due |
+|---|---|
+| Check enrolled students' prerequisites | 14 days before the class starts |
+| Send joining details | 2 days before the class starts |
+| Follow-up email to attendees | 3 days after the class ends (a one-day class ends on its start) |
+| Commission form | 14 days after the class ends |
+| Revenue and expenses (quarterly) | the last day of the month after each quarter: 31 Jan, 30 Apr, 31 Jul, 31 Oct |
+
+Rules:
+- Admin task dates, hand-added task dates and the digest's 09:00 are Amsterdam dates and times; reminder dates stay Sydney dates (section 3).
+- Tasks exist only for classes starting on or after 4 November 2026 and for quarters ending after it (`SINCE` in `backend/app/admin_tasks.py`).
+- The Tasks page and the digest list a task from 7 days before it is due until it is ticked done; an overdue task is in every digest. The quarterly task also gets a heads-up line exactly 7 days before.
+- The digest goes once a day from 09:00 Amsterdam time (later the same day if the Mac was asleep), and not at all on a day with nothing due today and nothing overdue.

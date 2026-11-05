@@ -7,7 +7,7 @@ import threading
 from app.core.config import settings
 from app.core.database import Base, engine
 from handouts import ingest as handouts_ingest
-from app.api import tasks, students, classes, events, emails, ideas, auth, documents, global_students, admin, ai_tasks, handouts, email_campaigns, reminders
+from app.api import tasks, students, classes, events, emails, ideas, auth, documents, global_students, admin, ai_tasks, handouts, email_campaigns, reminders, admin_tasks
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -56,6 +56,7 @@ app.include_router(ai_tasks.router, prefix="/api", tags=["ai_tasks"])
 app.include_router(handouts.router, prefix="/api", tags=["handouts"])
 app.include_router(email_campaigns.router, prefix="/api", tags=["email_campaigns"])
 app.include_router(reminders.router, prefix="/api", tags=["reminders"])
+app.include_router(admin_tasks.router, prefix="/api", tags=["admin_tasks"])
 app.include_router(students.router, prefix="/api/students", tags=["students"])
 app.include_router(global_students.router, prefix="/api", tags=["global_students"])
 app.include_router(classes.router, prefix="/api/classes", tags=["classes"])
