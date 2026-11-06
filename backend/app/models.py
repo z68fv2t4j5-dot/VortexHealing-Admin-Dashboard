@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, DateTime, Boolean, Float, Enum, ForeignKey, Table, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, Date, DateTime, Boolean, Float, Enum, ForeignKey, Table, UniqueConstraint
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 from datetime import datetime
@@ -107,6 +107,21 @@ class ClassReminder(Base):
     stage = Column(String)  # 2m, 1m, 2w
     campaign_id = Column(Integer, ForeignKey("email_campaigns.id"))
     approved_at = Column(DateTime, default=datetime.utcnow)
+
+class AdminTaskDone(Base):
+    """A ticked class or quarterly admin task; the tasks themselves are worked out from the schedule"""
+    __tablename__ = "admin_tasks_done"
+    id = Column(Integer, primary_key=True)
+    key = Column(String, unique=True)  # class:<id>:<kind> or quarter:<yyyy>Q<n>:revenue
+    done_at = Column(DateTime, default=datetime.utcnow)
+
+class DigestLog(Base):
+    """One row per Amsterdam day the digest was decided: sent, or nothing was due"""
+    __tablename__ = "digest_log"
+    id = Column(Integer, primary_key=True)
+    day = Column(Date, unique=True)
+    sent_at = Column(DateTime, default=datetime.utcnow)
+    lines = Column(Integer, default=0)  # 0 when nothing was due and nothing was sent
 
 class GrowthIdea(Base):
     __tablename__ = "growth_ideas"

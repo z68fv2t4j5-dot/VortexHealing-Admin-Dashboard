@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     ZOOM_CREDENTIALS: Optional[str] = None  # JSON file with account_id, client_id, client_secret
     ZOOM_USER_ID: Optional[str] = None  # the account user whose meetings the report API lists
     ZOOM_FOLDER: Optional[str] = None  # teacher folder under TRANSCRIPTS_DIR for Zoom transcripts
+    NTFY_SERVER: str = "https://ntfy.sh"
+    NTFY_TOPIC: Optional[str] = None  # the daily digest's private topic; anyone who knows it can read the digests
 
     class Config:
         env_file = ".env"

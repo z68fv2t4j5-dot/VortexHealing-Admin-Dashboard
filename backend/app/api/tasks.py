@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from app.core.database import get_db
-from app.models import Task
+from app.models import Task, TaskStatus
 from app.schemas import TaskCreate, TaskUpdate, TaskResponse
+from datetime import datetime
 from typing import List
 
 router = APIRouter()
@@ -32,6 +33,12 @@ async def update_task(task_id: int, task_update: TaskUpdate, db: Session = Depen
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     for field, value in task_update.dict(exclude_unset=True).items():
+        if field == "status":
+            try:
+                value = TaskStatus(value)
+            except ValueError:
+                raise HTTPException(status_code=422, detail=f"Unknown status: {value}")
+            task.completed_at = datetime.utcnow() if value == TaskStatus.DONE else None
         setattr(task, field, value)
     db.commit()
     db.refresh(task)

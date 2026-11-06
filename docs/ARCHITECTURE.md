@@ -1,6 +1,6 @@
 # Architecture map
 
-last_reviewed: 2026-11-02
+last_reviewed: 2026-11-05
 
 The one living map of this repository: components, flows, boundaries and invariants. Read it before touching unfamiliar code; update it in the same change that moves structure (`harness-close` step 3). It describes this repository only. Each invariant cites the defect or decision that bought it. Factual claims carry a `verify:` line so the lint fails on the commit that makes them false.
 
@@ -28,7 +28,10 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
 | `frontend/src/components/HandoutsNotes.tsx` | Teacher-note editor and the Notes tab on the Handouts page | ADR-0008 |
 | `frontend/src/components/HandoutsImprove.tsx`, `frontend/src/components/AnswerText.tsx` | The Improve tab (test questions, runs, marking, note drafts); answer rendering shared with the page | `docs/plans/PLAN-handouts-improve-2610291801.md` |
 | `frontend/src/components/RemindersDue.tsx` | "Reminders due" panel at the top of the Email page | ADR-0007 |
-| `docs/CLASS_RULES.md` | How to read the flowchart, decisions on unusual boxes, reminder timing | itself |
+| `backend/app/admin_tasks.py`, `backend/app/api/admin_tasks.py` | Admin tasks worked out from the class schedule and the quarter; Done records a key in `admin_tasks_done` | `docs/CLASS_RULES.md` section 5, ADR-0010 |
+| `backend/app/digest.py` | The daily push digest to Daniel's phone through ntfy; CLI `python -m app.digest [--dry-run]`, run hourly by a LaunchAgent outside the repository | ADR-0010, Digest flow |
+| `frontend/src/components/AdminTasksDue.tsx` | "From your classes" panel at the top of the Tasks page | ADR-0010 |
+| `docs/CLASS_RULES.md` | How to read the flowchart, decisions on unusual boxes, reminder and admin-task timing | itself |
 
 <!-- verify: exists backend/app/api/email_campaigns.py -->
 <!-- verify: exists backend/handouts/catalog.py -->
@@ -49,6 +52,8 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
    <!-- verify: present 'qwen/qwen3.8-27b' in backend/app/core -->
 7. Transcript import (Zoom): `python -m transcript_import zoom` -> report API lists the account's meeting instances for the last six months (`ZOOM_USER_ID`, token from the `ZOOM_CREDENTIALS` file) -> UUIDs already in `TRANSCRIPTS_DIR/zoom-import/transcripts_manifest.csv` skipped -> `/meetings/{uuid}/transcript` (404 or not downloadable = unavailable) -> `.vtt` staged in `zoom-import/vtt/`, Markdown (one paragraph per speaker turn) named `YYYY-MM-DD HHMM — <topic>` with the UTC start, written to the one non-underscore `ZOOM_FOLDER` subfolder whose files share the topic, else `_inbox/` -> manifest row. The next handouts scan indexes it (`_inbox/` and `zoom-import/` excepted). Files: `backend/transcript_import/zoom.py`.
    <!-- verify: exists backend/transcript_import/zoom.py -->
+8. Digest: LaunchAgent `com.vortexhealing.digest` (on Daniel's Mac, not in the repository) runs `python -m app.digest` in `backend/` at minute 0 of every hour and at login -> before 09:00 Amsterdam time, or when `digest_log` already has today's Amsterdam date, it exits -> otherwise it reads `due_now` (the Email page's due list, Sydney date), upcoming reminder dates, `admin_tasks` (schedule and quarter minus `admin_tasks_done`, Amsterdam date) and hand-added tasks with a due date -> `build` makes one message (today, overdue, coming up in 7 days; recipient counts, never names), or nothing on a day with nothing due today or overdue -> one JSON POST to `NTFY_SERVER` on topic `NTFY_TOPIC` -> a `digest_log` row. A failed POST logs nothing, so the next hour retries. Tasks page: `GET /api/admin-tasks` and `POST /api/admin-tasks/done`; hand-added tasks are marked done through `PUT /api/tasks/{id}`. Files: `backend/app/digest.py`, `backend/app/admin_tasks.py`, `backend/app/api/admin_tasks.py`, `frontend/src/components/AdminTasksDue.tsx`, `frontend/src/pages/Tasks.tsx`.
+   <!-- verify: exists backend/app/digest.py -->
 
 ## Boundaries and invariants
 
@@ -66,8 +71,11 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
   <!-- verify: absent 'transcript_import' in backend/app -->
 - **Email send records, it does not deliver.** `/api/email/send` marks the campaign `sent` and writes `email_recipients` rows with status `pending`; no mail transport is wired up yet. Bought by: Phase 1 scope in `docs/EMAIL_CAMPAIGN_PLAN.md`.
   <!-- verify: absent 'smtplib|sendgrid|nodemailer' in backend/app -->
-- **No reminder is recorded without a person's click, and none twice.** There is no background scheduler; `class_reminders` is unique on (class_id, stage). Bought by: ADR-0007.
+- **No reminder is recorded without a person's click, and none twice.** `class_reminders` is unique on (class_id, stage). The only scheduled job, the digest, writes `digest_log` alone and never approves or records a reminder or campaign. Bought by: ADR-0007, narrowed by ADR-0010.
   <!-- verify: present 'UniqueConstraint\("class_id", "stage"\)' in backend/app -->
+  <!-- verify: absent 'ClassReminder\(|EmailCampaign\(|EmailRecipient\(' in backend/app/digest.py -->
+- **The digest carries no student data.** It reaches ntfy.sh, outside this Mac, so it holds class names, recipient counts and Daniel's own task titles only. It gets the recipients through the Email page's `due_now`, uses only how many there are, and never touches a name or address field. Bought by: ADR-0010 and ADR-0002.
+  <!-- verify: absent 'first_name|last_name|\.email\b' in backend/app/digest.py -->
 - **Tests never touch the real database.** `backend/tests/conftest.py` sets `DATABASE_URL` to in-memory SQLite before the app imports. Bought by: the suite running beside a live `vortexhealing.db`.
   <!-- verify: present 'DATABASE_URL.. = .sqlite://' in backend/tests -->
   <!-- verify: exists AGENTS.md -->

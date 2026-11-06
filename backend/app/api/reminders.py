@@ -26,7 +26,8 @@ class ReminderApproval(BaseModel):
     body: str
 
 
-def _due(db: Session, today: date) -> list:
+def due_now(db: Session, today: date) -> list:
+    """The due list the Email page shows; the daily digest reads it too"""
     approved = {(r.class_id, r.stage) for r in db.query(ClassReminder).all()}
     students = filter_students_by_tags_and_lists(db, "", EMAIL_LIST)
     return due_reminders(db.query(Class).all(), students, approved, today)
@@ -45,7 +46,7 @@ def _default_text(name: str, start: datetime) -> tuple:
 async def list_due(db: Session = Depends(get_db), today: date = Depends(get_today)):
     """Reminders waiting for approval, with pre-filled text and sample recipients"""
     out = []
-    for r in _due(db, today):
+    for r in due_now(db, today):
         c = r["class"]
         subject, body = _default_text(c.name, c.start_date)
         out.append({
@@ -69,7 +70,7 @@ async def approve(approval: ReminderApproval, db: Session = Depends(get_db), tod
     """Record a due reminder as sent to everyone eligible right now. The person's click is the approval."""
     if db.query(ClassReminder).filter_by(class_id=approval.class_id, stage=approval.stage).first():
         raise HTTPException(status_code=409, detail="This reminder has already been approved")
-    match = next((r for r in _due(db, today)
+    match = next((r for r in due_now(db, today)
                   if r["class"].id == approval.class_id and r["stage"] == approval.stage), None)
     if not match:
         raise HTTPException(status_code=404, detail="This reminder is not due")

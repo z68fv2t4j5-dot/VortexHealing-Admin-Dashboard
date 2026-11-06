@@ -1,6 +1,6 @@
 # ADR-0007: Class reminders are worked out on view and approved by a person
 
-**Status:** Accepted. **Date:** 2026-10-21. **Trigger:** class reminders at 2 months, 1 month and 2 weeks before each class needed automating without risking an unattended email to students.
+**Status:** Accepted; "no background scheduler" narrowed by 0010 to "no scheduler that acts for students". **Date:** 2026-10-21. **Trigger:** class reminders at 2 months, 1 month and 2 weeks before each class needed automating without risking an unattended email to students.
 
 ## Context
 
