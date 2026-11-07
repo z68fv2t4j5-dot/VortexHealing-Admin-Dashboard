@@ -1,6 +1,7 @@
 # Plan (feature): a daily push digest of due email reminders and admin tasks
-Status: done 2026-11-05 for the code. Installing the topic and the LaunchAgent on Daniel's Mac, and the first real push, wait for his go (NEXT-STEPS). Daniel's answers to the open questions: all three as recommended.
+Status: done 2026-11-05 for the code; installed 2026-11-06 on Daniel's go (topic, first real push confirmed on his phone, LaunchAgent). Daniel's answers to the open questions: all three as recommended.
 Departures:
+- Install, 2026-11-06: the LaunchAgent runs a small script (`~/Library/Application Support/VortexHealing/digest.sh`, the same layout as the load-models login item) rather than the venv's python directly, so that a failing digest sends one "Digest failed" alert a day instead of failing silently. The alert goes through `~/.local/bin/notify`, a command Daniel asked for the same day so that every project, including future ones, can alert him on its own ntfy topic; this digest's topic is registered there too.
 - `backend/requirements-test.txt` gained `email-validator==2.1.0` (same pin as `requirements.txt`). The new tasks-router test imports `app/schemas.py`, whose `EmailStr` needs it, and CI installs only that file. Simulating its absence reproduced the `ImportError`.
 - The last-day line names the weekday of the cut-off ("approve by Thu 14:00"). A digest sent after Sydney midnight (14:00 to 16:00 Amsterdam) already falls on Sydney's next date, so a bare time read as one already past. The cut-off is 15:00 in the weeks between the two countries' clock changes, not only 14:00 or 16:00.
 - `docs/memory/daily-digest.md` and the rebuilt `docs/memory/MEMORY.md` were added by the close routine.
