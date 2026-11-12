@@ -13,6 +13,7 @@ import Ideas from './pages/Ideas';
 import Documents from './pages/Documents';
 import Chat from './pages/Chat';
 import Handouts from './pages/Handouts';
+import ClassLists from './pages/ClassLists';
 import './App.css';
 
 const queryClient = new QueryClient();
@@ -29,6 +30,7 @@ function App() {
               <Route path="/students" element={<Students />} />
               <Route path="/global-students" element={<GlobalStudents />} />
               <Route path="/classes" element={<Classes />} />
+              <Route path="/class-lists" element={<ClassLists />} />
               <Route path="/events" element={<Events />} />
               <Route path="/tasks" element={<Tasks />} />
               <Route path="/handouts" element={<Handouts />} />

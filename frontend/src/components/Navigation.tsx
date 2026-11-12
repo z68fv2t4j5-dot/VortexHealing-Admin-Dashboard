@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { LayoutDashboard, Users, Globe, BookOpen, Calendar, CheckSquare, MessageCircle, Mail, Lightbulb, FileText, Library } from 'lucide-react';
+import { LayoutDashboard, Users, Globe, BookOpen, ClipboardList, Calendar, CheckSquare, MessageCircle, Mail, Lightbulb, FileText, Library } from 'lucide-react';
 import '../styles/Navigation.css';
 
 export default function Navigation() {
@@ -15,6 +15,7 @@ export default function Navigation() {
         <li><Link to="/students"><Users size={20} /> Students</Link></li>
         <li><Link to="/global-students"><Globe size={20} /> Global Students</Link></li>
         <li><Link to="/classes"><BookOpen size={20} /> Classes</Link></li>
+        <li><Link to="/class-lists"><ClipboardList size={20} /> Class Lists</Link></li>
         <li><Link to="/events"><Calendar size={20} /> Events</Link></li>
         <li><Link to="/tasks"><CheckSquare size={20} /> Tasks</Link></li>
         <li><Link to="/handouts"><Library size={20} /> Handouts</Link></li>
