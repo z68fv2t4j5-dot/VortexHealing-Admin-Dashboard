@@ -65,6 +65,16 @@ def test_an_email_address_column_is_read_as_the_email_never_as_the_postal_addres
     assert (a["email"], a["address"]) == ("ivy@example.com", "1 Test St Testville")
 
 
+def test_the_postal_address_question_is_read_even_after_corsizios_own_address_columns():
+    # Exports since November 2026 carry Corsizio's own address columns, empty, before the form's question
+    a = cl.parse('"First Name","Last Name","Email","Phone","Address","Address: City","Address: State/Province",'
+                 '"Address: Country","Address: Zip/Postal Code","Coupon Code",'
+                 '"Enter your complete Postal Address, including country and postal code"\n'
+                 '"Wren","Hill","wren@example.com","0400000001","","","","","","",'
+                 '"12 Example Road, Sample Vale, NSW, 2474, Australia"\n')[0]
+    assert (a["phone"], a["address"]) == ("0400000001", "12 Example Road, Sample Vale, NSW, 2474, Australia")
+
+
 def test_a_file_without_name_columns_is_refused():
     with pytest.raises(ValueError, match="Corsizio"):
         cl.parse("Name,Email\nIvy,ivy@example.com\n")
@@ -80,6 +90,11 @@ def test_a_file_without_name_columns_is_refused():
     ("12 Smith St St Kilda VIC 3182", ("12 Smith St", "", "St Kilda", "VIC", "3182", "AUSTRALIA"), []),
     ("12 St Georges Rd Penshurst NSW 2222", ("12 St Georges Rd", "", "Penshurst", "NSW", "2222", "AUSTRALIA"), []),
     ("Unit 3, 12 Long Street, Newtown, NSW 2042", ("Unit 3", "12 Long Street", "Newtown", "NSW", "2042", "AUSTRALIA"), []),
+    ("8 Example Street, Fitzroy, Victoria 3065, australia", ("8 Example Street", "", "Fitzroy", "VIC", "3065", "AUSTRALIA"), []),
+    ("5 Sample Road Newtown New South Wales 2042", ("5 Sample Road", "", "Newtown", "NSW", "2042", "AUSTRALIA"), []),
+    ("2 Test Way, Sampleton, Western Australia", ("2 Test Way", "", "Sampleton", "WA", "", "AUSTRALIA"), ["no postcode"]),
+    ("4 Test Pde, Glen Example, South Australia 5000, Australia", ("4 Test Pde", "", "Glen Example", "SA", "5000", "AUSTRALIA"), []),
+    ("7 Sample Cct, Exampleton, Australian Capital Territory 2600", ("7 Sample Cct", "", "Exampleton", "ACT", "2600", "AUSTRALIA"), []),
     ("393 Example Rd Exampleton", ("393 Example Rd", "", "Exampleton", "", "", ""), ["no state", "no postcode", "no country"]),
     ("Kleine Laan 32 1435 GP Dorp The Netherlands", ("Kleine Laan 32 1435 GP Dorp", "", "", "", "", "NETHERLANDS"),
      ["overseas address: check the split"]),
@@ -89,6 +104,7 @@ def test_a_file_without_name_columns_is_refused():
 def test_split_address(text, parts, misses):
     got, got_misses = cl.split_address(text)
     assert (tuple(got[f] for f in cl.ADDRESS_FIELDS), got_misses) == (parts, misses)
+    assert len(got["state"]) <= 3 and got["country"] == got["country"].upper()  # Daniel's rules, 2026-11-13
 
 
 # --- titles and format

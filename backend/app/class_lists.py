@@ -19,7 +19,13 @@ REPEATER_COUPON = "repeat"  # VHREPEATER; any other coupon still makes a repeate
 TITLE_NAMES = {FOUNDATIONAL: "Foundational"}  # as Daniel titles it: "Foundational Class List ..."
 
 ADDRESS_FIELDS = ("add1", "add2", "city", "state", "zip", "country")
-AU_STATES = r"NSW|VIC|QLD|WA|SA|TAS|ACT|NT"
+# Australian states typed in full or short, to the short form in Daniel's lists (3 letters at most, 2026-11-13)
+AU_STATES = {
+    "new south wales": "NSW", "victoria": "VIC", "queensland": "QLD", "western australia": "WA",
+    "south australia": "SA", "tasmania": "TAS", "australian capital territory": "ACT", "northern territory": "NT",
+    **{short.lower(): short for short in ("NSW", "VIC", "QLD", "WA", "SA", "TAS", "ACT", "NT")},
+}
+STATE_AT_END = re.compile(rf"(^|[,\s])({'|'.join(sorted(AU_STATES, key=len, reverse=True))})$", re.I)
 COUNTRIES = sorted([
     "australia", "new zealand", "the netherlands", "netherlands", "japan", "indonesia", "singapore", "malaysia",
     "thailand", "philippines", "hong kong", "china", "taiwan", "south korea", "korea", "india", "vietnam",
@@ -52,7 +58,8 @@ def parse(csv_text: str) -> list:
     coupon_col, answer_col = _column(fields, "coupon"), _column(fields, "repeater")
     email_col = "Email" if "Email" in fields else _column(fields, "email")
     phone_col = _column(fields, "phone")
-    address_col = _column(fields, "postal") or _column(fields, "address", unless="email")
+    # the form's question; Corsizio's own "Address: Zip/Postal Code" column is not it
+    address_col = _column(fields, "postal address") or _column(fields, "address", unless="email")
     attendees = []
     for row in reader:
         first, last = tidy(row.get("First Name")), tidy(row.get("Last Name"))
@@ -74,8 +81,9 @@ def parse(csv_text: str) -> list:
 
 def split_address(text: str) -> tuple:
     """add1, add2, city, state, zip and country from a one-line address, and what could not be found.
-    Rules: country at the end; an Australian state and four-digit postcode before it; with commas the part
-    before the state is the suburb; without them the street ends at the first street word (Road, St...)."""
+    Rules: country at the end, in capitals; an Australian state (full or short, kept short) and four-digit
+    postcode before it; with commas the part before the state is the suburb; without them the street ends at
+    the first street word (Road, St...)."""
     parts = dict.fromkeys(ADDRESS_FIELDS, "")
     rest = " ".join((text or "").split()).strip(" ,.")
     if not rest:
@@ -83,14 +91,16 @@ def split_address(text: str) -> tuple:
     low = rest.lower()
     for name in COUNTRIES:
         if low.endswith(name) and (len(low) == len(name) or low[-len(name) - 1] in " ,"):
+            if name == "australia" and STATE_AT_END.search(rest):
+                break  # "Western Australia" or "South Australia" is the state
             parts["country"] = "NETHERLANDS" if name.endswith("netherlands") else name.upper()
             rest = rest[:-len(name)].rstrip(" ,.")
             break
     if parts["country"] in ("", "AUSTRALIA"):
         if m := re.search(r"(^|[,\s])(\d{4})$", rest):
             parts["zip"], rest = m.group(2), rest[:m.start()].rstrip(" ,.")
-        if m := re.search(rf"(^|[,\s])({AU_STATES})$", rest, re.I):
-            parts["state"], rest = m.group(2).upper(), rest[:m.start()].rstrip(" ,.")
+        if m := STATE_AT_END.search(rest):
+            parts["state"], rest = AU_STATES[m.group(2).lower()], rest[:m.start()].rstrip(" ,.")
         if (parts["zip"] or parts["state"]) and not parts["country"]:
             parts["country"] = "AUSTRALIA"
     elif rest:  # overseas: keep the lines together for Daniel to finish

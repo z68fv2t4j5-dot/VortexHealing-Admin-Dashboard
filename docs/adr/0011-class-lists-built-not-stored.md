@@ -17,7 +17,7 @@ Before each class Daniel downloads a Corsizio attendee export (a CSV with a gene
 
 - No class list data accumulates on the Mac beyond what Daniel downloads; a list cannot be reopened on the dashboard later, only rebuilt from the export.
 - Tag suggestions can be wrong: a student tagged after attending the class being listed shows as "done" (5 such suggestions across the four October lists, against 19 of Daniel's 26 hand-picked repeaters found). Daniel unticks them.
-- The address rules know Australian states and four-digit postcodes; overseas and incomplete addresses are flagged, never guessed, so Daniel still finishes some by hand.
+- The address comes from the form's postal address question. The rules know Australian states, typed in full or short and always written short (3 letters at most), and four-digit postcodes; the country is written in capitals (Daniel, 2026-11-13). Overseas and incomplete addresses are flagged, never guessed, so Daniel still finishes some by hand.
 - `openpyxl` joins both requirements files.
 
 ## Alternatives rejected
