@@ -1,5 +1,8 @@
 # Plan (bugfix): Foundational addresses from the postal address question
-Status: done 2026-11-13, no departures. Requested by Daniel 2026-11-13 ("take information from that field and fill out the address rows... State should be 3 letters maximum and country should be in CAPITAL letters").
+Status: done 2026-11-13. Requested by Daniel 2026-11-13 ("take information from that field and fill out the address rows... State should be 3 letters maximum and country should be in CAPITAL letters").
+
+Departures from the plan as written:
+- The reported empty phone was the Standard format, which has no phone column: Daniel had built his Foundational export with Standard selected (no class picked, title "test 4"). With his yes, an export whose rows carry a postal address now suggests the Foundational format. Surface addition: `backend/app/api/class_lists.py`.
 
 ## Why
 

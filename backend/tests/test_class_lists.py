@@ -229,6 +229,13 @@ def test_preview_of_a_renamed_foundational_file_picks_the_foundational_format(ap
     assert by_last["Hill"]["address_misses"] == []
 
 
+def test_preview_of_an_export_with_postal_addresses_picks_the_foundational_format(api):
+    # Daniel built a Foundational export as Standard once, with no class picked (2026-11-13)
+    body = api.post("/api/class-lists/preview", json={"filename": "9-attendees-export-abc123.csv",
+                                                      "csv_text": FORM_CSV}).json()
+    assert (body["title"], body["class_name"], body["format"]) == ("", None, "foundational")
+
+
 def test_preview_refuses_a_file_that_is_not_an_export_and_an_unknown_class(api):
     assert api.post("/api/class-lists/preview", json={"csv_text": "Name\nIvy\n"}).status_code == 400
     assert api.post("/api/class-lists/preview", json={"csv_text": COUPON_CSV, "class_id": 99}).status_code == 404

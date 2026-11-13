@@ -65,8 +65,9 @@ async def preview(req: PreviewRequest, db: Session = Depends(get_db)):
 
     for a in attendees:
         a["address_misses"] = class_lists.split_address(a["address"])[1] if a["address"] else []
+    has_addresses = any(a["address"] for a in attendees)  # only the Foundational form asks for a postal address
     return {"title": title, "class_name": cls,
-            "format": "foundational" if class_lists.is_foundational(title, cls) else "standard",
+            "format": "foundational" if has_addresses or class_lists.is_foundational(title, cls) else "standard",
             "attendees": attendees}
 
 
