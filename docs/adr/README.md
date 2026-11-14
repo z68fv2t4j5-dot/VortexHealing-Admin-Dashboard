@@ -16,3 +16,4 @@ Every file has exactly one row here and ids are sequential (`adr-register`). `AG
 | 0008 | Handouts knowledge base: catalogue, hybrid search, data outside the repository | Accepted | 2026-10-23 |
 | 0009 | Transcript import code lives in this repository; the transcripts stay outside it | Accepted | 2026-11-02 |
 | 0010 | A daily push digest tells Daniel what is due; still nothing reaches students without his click | Accepted | 2026-11-04 |
+| 0011 | Class lists are built from an upload in memory and never stored; Daniel's ticks decide the repeaters | Accepted | 2026-11-12 |

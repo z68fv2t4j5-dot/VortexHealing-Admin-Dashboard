@@ -1,6 +1,6 @@
 # Architecture map
 
-last_reviewed: 2026-11-05
+last_reviewed: 2026-11-12
 
 The one living map of this repository: components, flows, boundaries and invariants. Read it before touching unfamiliar code; update it in the same change that moves structure (`harness-close` step 3). It describes this repository only. Each invariant cites the defect or decision that bought it. Factual claims carry a `verify:` line so the lint fails on the commit that makes them false.
 
@@ -31,6 +31,7 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
 | `backend/app/admin_tasks.py`, `backend/app/api/admin_tasks.py` | Admin tasks worked out from the class schedule and the quarter; Done records a key in `admin_tasks_done` | `docs/CLASS_RULES.md` section 5, ADR-0010 |
 | `backend/app/digest.py` | The daily push digest to Daniel's phone through ntfy; CLI `python -m app.digest [--dry-run]`, run hourly by a LaunchAgent outside the repository | ADR-0010, Digest flow |
 | `frontend/src/components/AdminTasksDue.tsx` | "From your classes" panel at the top of the Tasks page | ADR-0010 |
+| `backend/app/class_lists.py`, `backend/app/api/class_lists.py`, `frontend/src/pages/ClassLists.tsx` | Class Lists page: a Corsizio export in, a reviewed class list workbook out, in the standard or the Foundational format | ADR-0011, Class lists flow |
 | `docs/CLASS_RULES.md` | How to read the flowchart, decisions on unusual boxes, reminder and admin-task timing | itself |
 
 <!-- verify: exists backend/app/api/email_campaigns.py -->
@@ -54,6 +55,8 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
    <!-- verify: exists backend/transcript_import/zoom.py -->
 8. Digest: LaunchAgent `com.vortexhealing.digest` (on Daniel's Mac, not in the repository) runs `~/Library/Application Support/VortexHealing/digest.sh` at minute 0 of every hour and at login; the script runs `python -m app.digest` in this working tree's `backend/` and, on a non-zero exit, sends one "Digest failed" alert a day through Daniel's shared `~/.local/bin/notify` -> before 09:00 Amsterdam time, or when `digest_log` already has today's Amsterdam date, it exits -> otherwise it reads `due_now` (the Email page's due list, Sydney date), upcoming reminder dates, `admin_tasks` (schedule and quarter minus `admin_tasks_done`, Amsterdam date) and hand-added tasks with a due date -> `build` makes one message (today, overdue, coming up in 7 days; recipient counts, never names), or nothing on a day with nothing due today or overdue -> one JSON POST to `NTFY_SERVER` on topic `NTFY_TOPIC` -> a `digest_log` row. A failed POST logs nothing, so the next hour retries. Tasks page: `GET /api/admin-tasks` and `POST /api/admin-tasks/done`; hand-added tasks are marked done through `PUT /api/tasks/{id}`. Files: `backend/app/digest.py`, `backend/app/admin_tasks.py`, `backend/app/api/admin_tasks.py`, `frontend/src/components/AdminTasksDue.tsx`, `frontend/src/pages/Tasks.tsx`.
    <!-- verify: exists backend/app/digest.py -->
+9. Class lists: Class Lists page reads a Corsizio CSV with `File.text()` and the schedule from `GET /api/classes/` -> `POST /api/class-lists/preview` (`parse`: names tidied, repeaters from a coupon code or the form's repeater answer; then students matched by email whose class tags include the class, via `class_for` and `completed_from_tags`; title from the picked class, else from a renamed file; format Foundational when the class or title names it) -> Daniel edits the title and format and ticks Repeater or Remove -> `POST /api/class-lists/build` -> `build_standard` or `build_foundational` (address split by `split_address`; misses filled light orange) -> `<title>.xlsx` download. Nothing is written to the database or the disk. Files: `backend/app/class_lists.py`, `backend/app/api/class_lists.py`, `frontend/src/pages/ClassLists.tsx`.
+   <!-- verify: exists frontend/src/pages/ClassLists.tsx -->
 
 ## Boundaries and invariants
 
@@ -76,6 +79,8 @@ A local admin dashboard for one VortexHealing teacher: student contacts, the cla
   <!-- verify: absent 'ClassReminder\(|EmailCampaign\(|EmailRecipient\(' in backend/app/digest.py -->
 - **The digest carries no student data.** It reaches ntfy.sh, outside this Mac, so it holds class names, recipient counts and Daniel's own task titles only. It gets the recipients through the Email page's `due_now`, uses only how many there are, and never touches a name or address field. Bought by: ADR-0010 and ADR-0002.
   <!-- verify: absent 'first_name|last_name|\.email\b' in backend/app/digest.py -->
+- **An uploaded class list is never stored.** The export holds names, emails, phone numbers and addresses; the page sends it, the backend returns suggestions or a workbook, and nothing is kept. `test_uploads_are_never_stored` fails if the module gains database or file access or the router gains a write. Bought by: ADR-0011.
+  <!-- verify: present 'def test_uploads_are_never_stored' in backend/tests -->
 - **Tests never touch the real database.** `backend/tests/conftest.py` sets `DATABASE_URL` to in-memory SQLite before the app imports. Bought by: the suite running beside a live `vortexhealing.db`.
   <!-- verify: present 'DATABASE_URL.. = .sqlite://' in backend/tests -->
   <!-- verify: exists AGENTS.md -->
